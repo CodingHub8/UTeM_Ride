@@ -30,10 +30,42 @@ const DARK_MAP_STYLE = [
 export default function ActiveRideScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams();
   const { isDark, theme } = useTheme();
+  const { 
+    destination, 
+    pickupAddress, 
+    pickupLat, 
+    pickupLng,
+    distance,
+    duration,
+    polyline
+  } = useLocalSearchParams<{
+    destination: string;
+    pickupAddress?: string;
+    pickupLat?: string;
+    pickupLng?: string;
+    distance?: string;
+    duration?: string;
+    polyline?: string;
+  }>();
 
-  const destinationName = params.destination as string || 'UTeM Main Campus';
+  const pickupCoord = pickupLat && pickupLng 
+    ? { latitude: parseFloat(pickupLat), longitude: parseFloat(pickupLng) }
+    : PICKUP_COORD;
+
+  const destCoord = polyline 
+    ? JSON.parse(polyline)[JSON.parse(polyline).length - 1]
+    : DEST_COORD;
+
+  const driverCoord = DRIVER_COORD;
+
+  const routePoints = polyline ? JSON.parse(polyline) : [
+    pickupCoord,
+    { latitude: (pickupCoord.latitude + destCoord.latitude) / 2 + 0.001, longitude: (pickupCoord.longitude + destCoord.longitude) / 2 + 0.001 },
+    destCoord,
+  ];
+
+  const destinationName = destination || 'UTeM Main Campus';
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? Colors.darkBg : Colors.gray100 },
@@ -53,34 +85,34 @@ export default function ActiveRideScreen() {
           style={styles.map}
           provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           initialRegion={{
-            latitude: (PICKUP_COORD.latitude + DEST_COORD.latitude) / 2,
-            longitude: (PICKUP_COORD.longitude + DEST_COORD.longitude) / 2,
-            latitudeDelta: 0.015,
-            longitudeDelta: 0.015,
+            latitude: (pickupCoord.latitude + destCoord.latitude) / 2,
+            longitude: (pickupCoord.longitude + destCoord.longitude) / 2,
+            latitudeDelta: Math.abs(pickupCoord.latitude - destCoord.latitude) * 2 || 0.015,
+            longitudeDelta: Math.abs(pickupCoord.longitude - destCoord.longitude) * 2 || 0.015,
           }}
           customMapStyle={isDark ? DARK_MAP_STYLE : []}
           userInterfaceStyle={theme}
         >
           <Polyline
-            coordinates={ROUTE_POINTS}
+            coordinates={routePoints}
             strokeColor={Colors.primary}
             strokeWidth={4}
           />
 
-          <Marker coordinate={PICKUP_COORD}>
+          <Marker coordinate={pickupCoord}>
             <View style={[styles.markerCircle, { backgroundColor: Colors.success }]}>
               <View style={styles.markerInner} />
             </View>
           </Marker>
 
-          <Marker coordinate={DEST_COORD}>
+          <Marker coordinate={destCoord}>
             <View style={[styles.markerCircle, { backgroundColor: Colors.error }]}>
               <Ionicons name="location" size={12} color={Colors.white} />
             </View>
           </Marker>
 
           {/* Driver Marker */}
-          <Marker coordinate={DRIVER_COORD} flat anchor={{ x: 0.5, y: 0.5 }}>
+          <Marker coordinate={driverCoord} flat anchor={{ x: 0.5, y: 0.5 }}>
             <View style={styles.driverMarker}>
               <Ionicons name="car" size={24} color={Colors.white} />
             </View>
@@ -90,7 +122,7 @@ export default function ActiveRideScreen() {
         {/* ETA badge */}
         <View style={styles.etaBadge}>
           <Ionicons name="time" size={18} color={Colors.white} />
-          <Text style={styles.etaText}>3 min away</Text>
+          <Text style={styles.etaText}>{duration || '3 min'} away</Text>
         </View>
       </View>
 
@@ -141,8 +173,8 @@ export default function ActiveRideScreen() {
             <View style={[styles.dot, { backgroundColor: Colors.error }]} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.routeLabel, dynamicStyles.text]}>Current Location</Text>
-            <Text style={[styles.routeLabel, dynamicStyles.text, { marginTop: 20 }]}>{destinationName}</Text>
+            <Text style={[styles.routeLabel, dynamicStyles.text]} numberOfLines={1}>{pickupAddress || 'Current Location'}</Text>
+            <Text style={[styles.routeLabel, dynamicStyles.text, { marginTop: 20 }]} numberOfLines={1}>{destinationName}</Text>
           </View>
         </View>
 

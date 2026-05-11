@@ -6,39 +6,130 @@ import { useState, useEffect } from 'react';
 import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { getCurrentLocationAddress, getDirections, getNearbyPlaces, getPlaceAutocomplete, getPlaceDetails } from '@/utils/location';
+
+const BASE_FARES = {
+  economy: 2.50,
+  comfort: 4.50,
+  premium: 8.00
+};
+
+const RATE_PER_KM = 1.20; // RM 1.20 per km
+
 const RIDE_TYPES = [
-  { id: 'economy', name: 'Economy', icon: '🚗', price: 'RM 5.50', eta: '3 min', seats: 4 },
-  { id: 'comfort', name: 'Comfort', icon: '🚙', price: 'RM 8.00', eta: '5 min', seats: 4 },
-  { id: 'premium', name: 'Premium', icon: '✨', price: 'RM 12.00', eta: '8 min', seats: 6 },
+  { id: 'economy', name: 'Economy', icon: '🚗', basePrice: BASE_FARES.economy, seats: 4 },
+  { id: 'comfort', name: 'Comfort', icon: '🚙', basePrice: BASE_FARES.comfort, seats: 4 },
+  { id: 'premium', name: 'Premium', icon: '✨', basePrice: BASE_FARES.premium, seats: 6 },
 ];
 
-const PLACES = [
-  { id: '1', name: 'UTeM Main Campus', address: 'Jalan Hang Tuah Jaya, 76100' },
-  { id: '2', name: 'UTeM City Campus', address: 'Jalan Hang Tuah, 75300' },
-  { id: '3', name: 'Melaka Sentral', address: 'Jalan Tun Razak, 75400' },
-  { id: '4', name: 'Dataran Pahlawan', address: 'Jalan Merdeka, 75000' },
-];
+// We've removed hardcoded PLACES to prioritize map selection
 
 export default function SetDestinationScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDark } = useTheme();
-  const { initialDestination } = useLocalSearchParams<{ initialDestination?: string }>();
+  const { initialDestination, destLat, destLng } = useLocalSearchParams<{ 
+    initialDestination?: string,
+    destLat?: string,
+    destLng?: string
+  }>();
 
   const [query, setQuery] = useState('');
   const [selectedPlace, setSelectedPlace] = useState<string | null>(null);
   const [selectedRide, setSelectedRide] = useState('economy');
+  const [pickupAddress, setPickupAddress] = useState('Fetching current location...');
+  const [pickupCoords, setPickupCoords] = useState<{latitude: number, longitude: number} | null>(null);
+  const [routeData, setRouteData] = useState<any>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [recommendedPlaces, setRecommendedPlaces] = useState<any[]>([]);
+  const [autocompletePlaces, setAutocompletePlaces] = useState<any[]>([]);
+  const [selectedCoords, setSelectedCoords] = useState<{latitude: number, longitude: number} | null>(null);
 
+  useEffect(() => {
+    if (pickupCoords) {
+      (async () => {
+        const recommended = await getNearbyPlaces(pickupCoords.latitude, pickupCoords.longitude);
+        setRecommendedPlaces(recommended);
+      })();
+    }
+  }, [pickupCoords]);
+
+  // Handle autocomplete as user types
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(async () => {
+      if (query.length > 2 && query !== selectedPlace) {
+        const suggestions = await getPlaceAutocomplete(query, pickupCoords?.latitude, pickupCoords?.longitude);
+        setAutocompletePlaces(suggestions);
+      } else if (query.length <= 2) {
+        setAutocompletePlaces([]);
+      }
+    }, 400);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [query, selectedPlace, pickupCoords]);
+
+  useEffect(() => {
+    (async () => {
+      const loc = await getCurrentLocationAddress();
+      if (loc) {
+        setPickupAddress(loc.address);
+        setPickupCoords(loc.coords);
+      } else {
+        setPickupAddress('Current Location');
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (selectedPlace && pickupAddress) {
+      (async () => {
+        setIsSearching(true);
+        try {
+          let destination: string | { lat: number, lng: number } = selectedPlace;
+          
+          // Use precise coordinates if we have them
+          if (selectedCoords) {
+            destination = { lat: selectedCoords.latitude, lng: selectedCoords.longitude };
+          } else if (destLat && destLng && selectedPlace === initialDestination) {
+            destination = { lat: parseFloat(destLat), lng: parseFloat(destLng) };
+          }
+          
+          const directions = await getDirections(pickupAddress, destination);
+          if (directions) {
+            setRouteData(directions);
+          }
+        } finally {
+          setIsSearching(false);
+        }
+      })();
+    }
+  }, [selectedPlace, pickupAddress, destLat, destLng, initialDestination]);
+
+  const calculateFare = (basePrice: number) => {
+    if (!routeData) return 'RM --';
+    const distanceKm = routeData.distanceValue / 1000;
+    const total = basePrice + (distanceKm * RATE_PER_KM);
+    return `RM ${total.toFixed(2)}`;
+  };
+
+  // Sync state with navigation params
   useEffect(() => {
     if (initialDestination) {
       setQuery(initialDestination);
       setSelectedPlace(initialDestination);
+      
+      if (destLat && destLng) {
+        setSelectedCoords({ 
+          latitude: parseFloat(destLat as string), 
+          longitude: parseFloat(destLng as string) 
+        });
+      }
     }
-  }, [initialDestination]);
+  }, [initialDestination, destLat, destLng]);
 
   const filtered = query.length > 0
-    ? PLACES.filter((p) => p.name.toLowerCase().includes(query.toLowerCase()))
-    : PLACES;
+    ? (autocompletePlaces.length > 0 ? autocompletePlaces : (query === initialDestination ? [{ id: 'map', name: query, address: 'Map Selection', isMap: true }] : []))
+    : recommendedPlaces;
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? Colors.darkBg : Colors.white },
@@ -69,7 +160,7 @@ export default function SetDestinationScreen() {
           <View style={[styles.dot, { backgroundColor: Colors.success }]} />
           <View style={styles.locInput}>
             <Text style={styles.locLabel}>Pickup</Text>
-            <Text style={[styles.locValue, dynamicStyles.text]}>Current Location</Text>
+            <Text style={[styles.locValue, dynamicStyles.text]} numberOfLines={1}>{pickupAddress}</Text>
           </View>
         </View>
         <View style={[styles.divider, { backgroundColor: isDark ? Colors.darkBorder : Colors.gray200 }]} />
@@ -77,44 +168,76 @@ export default function SetDestinationScreen() {
           <View style={[styles.dot, { backgroundColor: Colors.error }]} />
           <View style={styles.locInput}>
             <Text style={styles.locLabel}>Destination</Text>
-            <TextInput
-              style={[styles.searchInput, dynamicStyles.text]}
-              placeholder="Search destination..."
-              placeholderTextColor={isDark ? Colors.gray600 : Colors.gray400}
-              value={query}
-              onChangeText={(text) => {
-                setQuery(text);
-                if (selectedPlace) setSelectedPlace(null);
-              }}
-              onFocus={() => {
-                if (selectedPlace) setSelectedPlace(null);
-              }}
-              autoFocus
-            />
+            <View style={styles.searchInputWrapper}>
+              <TextInput
+                style={[styles.searchInput, dynamicStyles.text]}
+                placeholder="Search destination..."
+                placeholderTextColor={isDark ? Colors.gray600 : Colors.gray400}
+                value={query}
+                onChangeText={(text) => {
+                  setQuery(text);
+                  if (selectedPlace) setSelectedPlace(null);
+                }}
+                onFocus={() => {
+                  if (selectedPlace) setSelectedPlace(null);
+                }}
+                autoFocus
+              />
+              {query.length > 0 && (
+                <TouchableOpacity 
+                  onPress={() => {
+                    setQuery('');
+                    setSelectedPlace(null);
+                    setRouteData(null);
+                  }}
+                  style={styles.clearBtn}
+                >
+                  <Ionicons name="close-circle" size={20} color={isDark ? Colors.gray500 : Colors.gray400} />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
       </View>
 
       {!selectedPlace ? (
-        <FlatList
-          data={filtered}
-          keyExtractor={(i) => i.id}
-          style={styles.list}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.resultRow, dynamicStyles.border]}
-              onPress={() => { setSelectedPlace(item.name); setQuery(item.name); }}
-            >
-              <View style={[styles.resultIcon, { backgroundColor: isDark ? Colors.primary + '30' : Colors.primary + '12' }]}>
-                <Ionicons name="location" size={20} color={isDark ? Colors.primaryLight : Colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.resultName, dynamicStyles.text]}>{item.name}</Text>
-                <Text style={[styles.resultAddr, dynamicStyles.subText]}>{item.address}</Text>
-              </View>
-            </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          {query.length === 0 && recommendedPlaces.length > 0 && (
+            <Text style={[styles.sectionTitle, dynamicStyles.text, { marginHorizontal: Spacing.md, marginTop: Spacing.md, marginBottom: 0 }]}>Recommended for you</Text>
           )}
-        />
+          <FlatList
+            data={filtered}
+            keyExtractor={(i) => i.id}
+            style={styles.list}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.resultRow, dynamicStyles.border]}
+                onPress={async () => { 
+                  setSelectedPlace(item.name); 
+                  setQuery(item.name);
+                  
+                  // Fetch precise coordinates if it's an autocomplete result or recommended place
+                  if (item.isAutocomplete) {
+                    const details = await getPlaceDetails(item.id);
+                    if (details) setSelectedCoords(details);
+                  } else if (item.coords) {
+                    setSelectedCoords(item.coords);
+                  } else if (item.isMap && destLat && destLng) {
+                    setSelectedCoords({ latitude: parseFloat(destLat), longitude: parseFloat(destLng) });
+                  }
+                }}
+              >
+                <View style={[styles.resultIcon, { backgroundColor: isDark ? Colors.primary + '30' : Colors.primary + '12' }]}>
+                  <Ionicons name={item.isMap ? "pin" : (item.isAutocomplete ? "search" : "location")} size={20} color={isDark ? Colors.primaryLight : Colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.resultName, dynamicStyles.text]} numberOfLines={1}>{item.name}</Text>
+                  <Text style={[styles.resultAddr, dynamicStyles.subText]} numberOfLines={1}>{item.address}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
       ) : (
         <View style={styles.rideSection}>
           <Text style={[styles.sectionTitle, dynamicStyles.text]}>Choose your ride</Text>
@@ -131,28 +254,53 @@ export default function SetDestinationScreen() {
               <Text style={{ fontSize: 28, marginRight: 12 }}>{r.icon}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.rideName, dynamicStyles.text]}>{r.name}</Text>
-                <Text style={[styles.rideEta, dynamicStyles.subText]}>{r.eta} · {r.seats} seats</Text>
+                <Text style={[styles.rideEta, dynamicStyles.subText]}>
+                  {isSearching ? 'Calculating...' : (routeData?.duration || '--')} · {r.seats} seats
+                </Text>
               </View>
-              <Text style={[styles.ridePrice, { color: isDark ? Colors.white : Colors.gray700 }, selectedRide === r.id && { color: isDark ? Colors.primaryLight : Colors.primary }]}>{r.price}</Text>
+              <Text style={[styles.ridePrice, { color: isDark ? Colors.white : Colors.gray700 }, selectedRide === r.id && { color: isDark ? Colors.primaryLight : Colors.primary }]}>
+                {isSearching ? 'RM --' : calculateFare(r.basePrice)}
+              </Text>
             </TouchableOpacity>
           ))}
           <View style={[styles.fareCard, { backgroundColor: isDark ? Colors.gray900 : Colors.gray50 }]}>
-            <View style={styles.fareRow}><Text style={[styles.fareLabel, dynamicStyles.subText]}>Estimated fare</Text><Text style={[styles.fareVal, { color: isDark ? Colors.primaryLight : Colors.primary }]}>{RIDE_TYPES.find((r) => r.id === selectedRide)?.price}</Text></View>
-            <View style={styles.fareRow}><Text style={[styles.fareLabel, dynamicStyles.subText]}>Distance</Text><Text style={[styles.fareDetail, { color: isDark ? Colors.gray300 : Colors.gray700 }]}>8.2 km</Text></View>
-            <View style={styles.fareRow}><Text style={[styles.fareLabel, dynamicStyles.subText]}>Duration</Text><Text style={[styles.fareDetail, { color: isDark ? Colors.gray300 : Colors.gray700 }]}>~15 min</Text></View>
+            <View style={styles.fareRow}>
+              <Text style={[styles.fareLabel, dynamicStyles.subText]}>Estimated fare</Text>
+              <Text style={[styles.fareVal, { color: isDark ? Colors.primaryLight : Colors.primary }]}>
+                {calculateFare(RIDE_TYPES.find(r => r.id === selectedRide)?.basePrice || 0)}
+              </Text>
+            </View>
+            <View style={styles.fareRow}>
+              <Text style={[styles.fareLabel, dynamicStyles.subText]}>Distance</Text>
+              <Text style={[styles.fareDetail, { color: isDark ? Colors.gray300 : Colors.gray700 }]}>{routeData?.distance || '--'}</Text>
+            </View>
+            <View style={styles.fareRow}>
+              <Text style={[styles.fareLabel, dynamicStyles.subText]}>Duration</Text>
+              <Text style={[styles.fareDetail, { color: isDark ? Colors.gray300 : Colors.gray700 }]}>{routeData?.duration || '--'}</Text>
+            </View>
           </View>
           <TouchableOpacity 
-            style={styles.confirmBtn} 
+            style={[styles.confirmBtn, isSearching && { opacity: 0.7 }]} 
+            disabled={isSearching || !routeData}
             onPress={() => {
               const ride = RIDE_TYPES.find(r => r.id === selectedRide);
-              const place = PLACES.find(p => p.name === selectedPlace);
+              const fare = calculateFare(ride?.basePrice || 0);
+              
               router.push({
                 pathname: '/(passenger)/ride-request',
                 params: { 
                   destination: selectedPlace,
-                  address: place?.address || selectedPlace,
+                  address: selectedPlace, // Use the display name
                   rideType: ride?.name,
-                  price: ride?.price
+                  price: fare,
+                  pickupAddress: pickupAddress,
+                  pickupLat: pickupCoords?.latitude,
+                  pickupLng: pickupCoords?.longitude,
+                  destLat: selectedCoords?.latitude?.toString() || destLat,
+                  destLng: selectedCoords?.longitude?.toString() || destLng,
+                  distance: routeData?.distance,
+                  duration: routeData?.duration,
+                  polyline: JSON.stringify(routeData?.polyline)
                 }
               });
             }}
@@ -176,7 +324,9 @@ const styles = StyleSheet.create({
   locInput: { flex: 1 },
   locLabel: { fontSize: FontSize.xs, color: Colors.gray400, fontWeight: FontWeight.medium, textTransform: 'uppercase', letterSpacing: 0.5 },
   locValue: { fontSize: FontSize.md, color: Colors.gray900, fontWeight: FontWeight.semibold, marginTop: 2 },
-  searchInput: { fontSize: FontSize.md, color: Colors.gray900, paddingVertical: 4 },
+  searchInputWrapper: { flexDirection: 'row', alignItems: 'center' },
+  searchInput: { flex: 1, fontSize: FontSize.md, color: Colors.gray900, paddingVertical: 4 },
+  clearBtn: { padding: 4 },
   divider: { height: 1, backgroundColor: Colors.gray200, marginVertical: Spacing.sm, marginLeft: 28 },
   list: { flex: 1, paddingHorizontal: Spacing.md, marginTop: Spacing.sm },
   resultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.gray100 },

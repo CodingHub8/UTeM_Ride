@@ -44,12 +44,43 @@ export default function RideRequestScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDark, theme } = useTheme();
-  const { destination, address, rideType, price } = useLocalSearchParams<{ 
+  const { 
+    destination, 
+    address, 
+    rideType, 
+    price, 
+    pickupAddress, 
+    pickupLat, 
+    pickupLng,
+    distance,
+    duration,
+    polyline
+  } = useLocalSearchParams<{ 
     destination: string, 
     address: string,
     rideType: string, 
-    price: string 
+    price: string,
+    pickupAddress?: string,
+    pickupLat?: string,
+    pickupLng?: string,
+    distance?: string,
+    duration?: string,
+    polyline?: string
   }>();
+
+  const pickupCoord = pickupLat && pickupLng 
+    ? { latitude: parseFloat(pickupLat), longitude: parseFloat(pickupLng) }
+    : PICKUP_COORD;
+
+  const destCoord = polyline 
+    ? JSON.parse(polyline)[JSON.parse(polyline).length - 1]
+    : DEST_COORD;
+
+  const routePoints = polyline ? JSON.parse(polyline) : [
+    pickupCoord,
+    { latitude: (pickupCoord.latitude + destCoord.latitude) / 2 + 0.001, longitude: (pickupCoord.longitude + destCoord.longitude) / 2 + 0.001 },
+    destCoord,
+  ];
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? Colors.darkBg : Colors.gray50 },
@@ -78,10 +109,10 @@ export default function RideRequestScreen() {
           style={styles.map}
           provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           initialRegion={{
-            latitude: (PICKUP_COORD.latitude + DEST_COORD.latitude) / 2,
-            longitude: (PICKUP_COORD.longitude + DEST_COORD.longitude) / 2,
-            latitudeDelta: 0.015,
-            longitudeDelta: 0.015,
+            latitude: (pickupCoord.latitude + destCoord.latitude) / 2,
+            longitude: (pickupCoord.longitude + destCoord.longitude) / 2,
+            latitudeDelta: Math.abs(pickupCoord.latitude - destCoord.latitude) * 2 || 0.015,
+            longitudeDelta: Math.abs(pickupCoord.longitude - destCoord.longitude) * 2 || 0.015,
           }}
           scrollEnabled={true}
           zoomEnabled={true}
@@ -91,20 +122,20 @@ export default function RideRequestScreen() {
         >
           {/* Track / Route Polyline */}
           <Polyline
-            coordinates={ROUTE_POINTS}
+            coordinates={routePoints}
             strokeColor={Colors.primary}
             strokeWidth={4}
           />
 
           {/* Pickup Marker */}
-          <Marker coordinate={PICKUP_COORD} title="Pickup">
+          <Marker coordinate={pickupCoord} title="Pickup">
             <View style={[styles.markerCircle, { backgroundColor: Colors.success }]}>
               <View style={styles.markerInner} />
             </View>
           </Marker>
 
           {/* Destination Marker */}
-          <Marker coordinate={DEST_COORD} title="Destination">
+          <Marker coordinate={destCoord} title="Destination">
             <View style={[styles.markerCircle, { backgroundColor: Colors.error }]}>
               <Ionicons name="location" size={12} color={Colors.white} />
             </View>
@@ -124,11 +155,11 @@ export default function RideRequestScreen() {
           <View style={styles.routeInfo}>
             <View style={styles.routeStop}>
               <Text style={styles.routeLabel}>Pickup</Text>
-              <Text style={[styles.routeValue, dynamicStyles.text]}>Current Location</Text>
+              <Text style={[styles.routeValue, dynamicStyles.text]} numberOfLines={1}>{pickupAddress || 'Current Location'}</Text>
             </View>
             <View style={styles.routeStop}>
               <Text style={styles.routeLabel}>Destination</Text>
-              <Text style={[styles.routeValue, dynamicStyles.text]}>{address || destination || 'UTeM Main Campus'}</Text>
+              <Text style={[styles.routeValue, dynamicStyles.text]} numberOfLines={1}>{address || destination || 'UTeM Main Campus'}</Text>
             </View>
           </View>
         </View>
@@ -143,11 +174,11 @@ export default function RideRequestScreen() {
           </View>
           <View style={styles.detailItem}>
             <Ionicons name="time" size={20} color={Colors.accent} />
-            <Text style={[styles.detailLabel, { color: isDark ? Colors.gray300 : Colors.gray700 }]}>~15 min</Text>
+            <Text style={[styles.detailLabel, { color: isDark ? Colors.gray300 : Colors.gray700 }]}>{duration || '~15 min'}</Text>
           </View>
           <View style={styles.detailItem}>
             <Ionicons name="navigate-circle" size={20} color={Colors.success} />
-            <Text style={[styles.detailLabel, { color: isDark ? Colors.gray300 : Colors.gray700 }]}>8.2 km</Text>
+            <Text style={[styles.detailLabel, { color: isDark ? Colors.gray300 : Colors.gray700 }]}>{distance || '8.2 km'}</Text>
           </View>
         </View>
 
@@ -175,7 +206,15 @@ export default function RideRequestScreen() {
             style={styles.requestBtn}
             onPress={() => router.push({
               pathname: '/(passenger)/active-ride',
-              params: { destination: address || destination || 'UTeM Main Campus' }
+              params: { 
+                destination: address || destination || 'UTeM Main Campus',
+                pickupAddress,
+                pickupLat,
+                pickupLng,
+                distance,
+                duration,
+                polyline
+              }
             })}
           >
             <Text style={styles.requestText}>Request Ride</Text>

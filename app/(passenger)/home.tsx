@@ -18,6 +18,7 @@ import Animated, {
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { getRecentDestinations, saveRecentDestination } from '@/utils/location';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('screen');
 const COLLAPSED_HEIGHT = 160; 
@@ -33,12 +34,7 @@ const UTEM_REGION = {
   longitudeDelta: 0.01,
 };
 
-const RECENT_PLACES = [
-  { id: '1', name: 'UTeM Main Campus', address: 'Jalan Hang Tuah Jaya, 76100 Durian Tunggal', icon: 'school' as const },
-  { id: '2', name: 'Melaka Sentral', address: 'Jalan Tun Razak, 75400 Melaka', icon: 'bus' as const },
-  { id: '3', name: 'Dataran Pahlawan', address: 'Jalan Merdeka, 75000 Melaka', icon: 'cart' as const },
-  { id: '4', name: 'AEON Bandaraya Melaka', address: 'Jalan Ong Kim Wee, 75300 Melaka', icon: 'storefront' as const },
-];
+const RECENT_PLACES_LIMIT = 8;
 
 const DARK_MAP_STYLE = [
   { "elementType": "geometry", "stylers": [{ "color": "#242f3e" }] },
@@ -70,7 +66,39 @@ export default function PassengerHomeScreen() {
   
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [tappedLocation, setTappedLocation] = useState<{ latitude: number, longitude: number, address?: string } | null>(null);
+  const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
+  const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
+  const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
   
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(status === 'granted');
+      if (status === 'granted') {
+        try {
+          const location = await Location.getCurrentPositionAsync({});
+          setUserLocation(location);
+          
+          // Animate to user location on startup
+          mapRef.current?.animateToRegion({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          }, 1000);
+        } catch (error) {
+          console.warn('Error getting initial location:', error);
+        }
+      } else {
+        console.warn('Permission to access location was denied');
+      }
+
+      // Load recent places from cache
+      const recent = await getRecentDestinations();
+      setRecentPlaces(recent);
+    })();
+  }, []);
+
   const translateY = useSharedValue(SNAP_BOTTOM); // Start at collapsed for safety on first load
   const context = useSharedValue({ y: SNAP_BOTTOM });
 
@@ -149,23 +177,75 @@ export default function PassengerHomeScreen() {
 
   const fetchAddress = async (coords: { latitude: number, longitude: number }) => {
     try {
+      const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+      console.log('Fetching address for:', coords, 'with API Key present:', !!apiKey);
+      
+      // Try Google Maps Geocoding API first for better reliability on Android APK
+      if (apiKey) {
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${coords.latitude},${coords.longitude}&key=${apiKey}`
+        );
+        const data = await response.json();
+        console.log('Google Geocoding Response Status:', data.status);
+        
+        if (data.status === 'OK' && data.results.length > 0) {
+          // Get the most relevant address (usually the first one)
+          const address = data.results[0].formatted_address;
+          setTappedLocation({ ...coords, address });
+          return;
+        } else if (data.error_message) {
+          console.error('Google Geocoding API Error:', data.error_message);
+        }
+      }
+
+      // Fallback to Expo Location (Native Geocoder)
+      console.log('Falling back to native geocoder...');
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.warn('Native geocoder skipped: Location permission not granted');
+        setTappedLocation({ ...coords, address: 'Permission required' });
+        return;
+      }
+
       const results = await Location.reverseGeocodeAsync(coords);
       if (results && results.length > 0) {
         const place = results[0];
         const formattedAddress = [place.name, place.street, place.district, place.city]
           .filter(Boolean)
           .join(', ');
-        setTappedLocation({ ...coords, address: formattedAddress });
+        setTappedLocation({ ...coords, address: formattedAddress || 'Unknown Location' });
       } else {
         setTappedLocation({ ...coords, address: 'Address not found' });
       }
     } catch (error) {
+      console.error('Geocoding error:', error);
       setTappedLocation({ ...coords, address: 'Address not found' });
     }
   };
 
-  const handleLocateMe = () => {
-    mapRef.current?.animateToRegion(UTEM_REGION, 800);
+  const handleLocateMe = async () => {
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        const req = await Location.requestForegroundPermissionsAsync();
+        if (req.status !== 'granted') return;
+      }
+      
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setUserLocation(location);
+      mapRef.current?.animateToRegion({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      }, 800);
+    } catch (error) {
+      console.warn('Error locating user:', error);
+      // Fallback to default region if GPS fails
+      mapRef.current?.animateToRegion(UTEM_REGION, 800);
+    }
   };
 
   const animatedFabStyle = useAnimatedStyle(() => {
@@ -278,10 +358,22 @@ export default function PassengerHomeScreen() {
                       (!tappedLocation.address || tappedLocation.address === 'Fetching address...' || tappedLocation.address === 'Address not found') && styles.tappedGoDisabled
                     ]}
                     disabled={!tappedLocation.address || tappedLocation.address === 'Fetching address...' || tappedLocation.address === 'Address not found'}
-                    onPress={() => router.push({
-                      pathname: '/(passenger)/set-destination',
-                      params: { initialDestination: tappedLocation.address }
-                    })}
+                    onPress={async () => {
+                      await saveRecentDestination({
+                        name: tappedLocation.address || 'Dropped Pin',
+                        address: tappedLocation.address || '',
+                        lat: tappedLocation.latitude,
+                        lng: tappedLocation.longitude
+                      });
+                      router.push({
+                        pathname: '/(passenger)/set-destination',
+                        params: { 
+                          initialDestination: tappedLocation.address,
+                          destLat: String(tappedLocation.latitude),
+                          destLng: String(tappedLocation.longitude)
+                        }
+                      });
+                    }}
                   >
                     <Text style={styles.tappedGoText}>Go</Text>
                   </TouchableOpacity>
@@ -309,7 +401,7 @@ export default function PassengerHomeScreen() {
               {/* Recent Places */}
               <Text style={[styles.sectionTitle, { color: isDark ? Colors.gray500 : Colors.gray500 }]}>Recent Places</Text>
               <FlatList
-                data={RECENT_PLACES}
+                data={recentPlaces}
                 keyExtractor={(item) => item.id}
                 scrollEnabled={false}
                 renderItem={({ item }) => (
@@ -317,7 +409,11 @@ export default function PassengerHomeScreen() {
                     style={[styles.placeRow, dynamicStyles.placeRowBorder]}
                     onPress={() => router.push({
                       pathname: '/(passenger)/set-destination',
-                      params: { initialDestination: item.name }
+                      params: { 
+                        initialDestination: item.name || item.address,
+                        destLat: String(item.lat),
+                        destLng: String(item.lng)
+                      }
                     })}
                   >
                     <View style={styles.placeIcon}>
