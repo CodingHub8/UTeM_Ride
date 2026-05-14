@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import MapView, { PROVIDER_GOOGLE, Marker, Polyline } from 'react-native-maps';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
+import { saveRecentDestination } from '@/utils/location';
 
 // Mock coordinates for preview
 const PICKUP_COORD = { latitude: 2.3135, longitude: 102.3211 };
@@ -204,18 +205,29 @@ export default function RideRequestScreen() {
           </View>
           <TouchableOpacity
             style={styles.requestBtn}
-            onPress={() => router.push({
-              pathname: '/(passenger)/active-ride',
-              params: { 
-                destination: address || destination || 'UTeM Main Campus',
-                pickupAddress,
-                pickupLat,
-                pickupLng,
-                distance,
-                duration,
-                polyline
-              }
-            })}
+            onPress={async () => {
+              // Save to recent destinations
+              await saveRecentDestination({
+                name: address || destination || 'UTeM Main Campus',
+                address: address || destination || '',
+                lat: destCoord.latitude,
+                lng: destCoord.longitude,
+                icon: 'time'
+              });
+
+              router.push({
+                pathname: '/(passenger)/active-ride',
+                params: { 
+                  destination: address || destination || 'UTeM Main Campus',
+                  pickupAddress,
+                  pickupLat,
+                  pickupLng,
+                  distance,
+                  duration,
+                  polyline
+                }
+              });
+            }}
           >
             <Text style={styles.requestText}>Request Ride</Text>
           </TouchableOpacity>

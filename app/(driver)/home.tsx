@@ -78,6 +78,24 @@ export default function DriverHomeScreen() {
         </View>
 
         {/* Quick actions */}
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: Colors.primary + '15', borderColor: Colors.primary + '30' }]}
+            onPress={() => router.push('/(driver)/create-pool')}
+          >
+            <Ionicons name="calendar" size={24} color={Colors.primary} />
+            <Text style={styles.actionBtnText}>Schedule / Pool</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: Colors.accent + '15', borderColor: Colors.accent + '30' }]}
+            onPress={() => router.push('/(driver)/wallet')}
+          >
+            <Ionicons name="wallet" size={24} color={Colors.accent} />
+            <Text style={styles.actionBtnText}>Earnings</Text>
+          </TouchableOpacity>
+        </View>
+
         {isOnline && (
           <TouchableOpacity
             style={styles.requestCard}
@@ -134,6 +152,9 @@ const styles = StyleSheet.create({
   statItem: { alignItems: 'center' },
   statValue: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.white },
   statLabel: { fontSize: FontSize.xs, color: Colors.gray400, marginTop: 2 },
+  actionRow: { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.md },
+  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, borderRadius: BorderRadius.lg, padding: Spacing.md, borderWidth: 1 },
+  actionBtnText: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, color: Colors.white },
   requestCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.accent + '15', borderRadius: BorderRadius.lg, padding: Spacing.md, borderWidth: 1, borderColor: Colors.accent + '30' },
   requestPulse: { width: 48, height: 48, borderRadius: 24, backgroundColor: Colors.accent + '20', justifyContent: 'center', alignItems: 'center', marginRight: Spacing.md },
   requestTitle: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.white },

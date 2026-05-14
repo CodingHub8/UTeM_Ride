@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, Platform, Dimensions } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { PROVIDER_GOOGLE, Marker, MapPressEvent } from 'react-native-maps';
@@ -70,16 +70,28 @@ export default function PassengerHomeScreen() {
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
   
+  // Refresh recent places whenever the screen is focused
   useEffect(() => {
+    const loadRecent = async () => {
+      const recent = await getRecentDestinations();
+      setRecentPlaces(recent);
+    };
+
+    loadRecent(); // Initial load
+    
+    // Check permission immediately
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       setLocationPermission(status === 'granted');
+      
       if (status === 'granted') {
         try {
-          const location = await Location.getCurrentPositionAsync({});
+          const location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
           setUserLocation(location);
           
-          // Animate to user location on startup
+          // Animate to user location on first load if we haven't yet
           mapRef.current?.animateToRegion({
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
@@ -89,15 +101,18 @@ export default function PassengerHomeScreen() {
         } catch (error) {
           console.warn('Error getting initial location:', error);
         }
-      } else {
-        console.warn('Permission to access location was denied');
       }
-
-      // Load recent places from cache
-      const recent = await getRecentDestinations();
-      setRecentPlaces(recent);
     })();
   }, []);
+
+  // Refresh recent places whenever the screen is focused
+  const navigation = useNavigation();
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      getRecentDestinations().then(setRecentPlaces);
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const translateY = useSharedValue(SNAP_BOTTOM); // Start at collapsed for safety on first load
   const context = useSharedValue({ y: SNAP_BOTTOM });
@@ -229,22 +244,38 @@ export default function PassengerHomeScreen() {
       if (status !== 'granted') {
         const req = await Location.requestForegroundPermissionsAsync();
         if (req.status !== 'granted') return;
+        setLocationPermission(true);
       }
       
+      // Get current position with higher accuracy
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
+      
       setUserLocation(location);
-      mapRef.current?.animateToRegion({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      }, 800);
+      
+      if (mapRef.current) {
+        mapRef.current.animateToRegion({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          latitudeDelta: 0.005, // Closer zoom
+          longitudeDelta: 0.005,
+        }, 800);
+      }
     } catch (error) {
       console.warn('Error locating user:', error);
-      // Fallback to default region if GPS fails
-      mapRef.current?.animateToRegion(UTEM_REGION, 800);
+      // If error, try to at least go to the last known position
+      const lastLoc = await Location.getLastKnownPositionAsync({});
+      if (lastLoc && mapRef.current) {
+        mapRef.current.animateToRegion({
+          latitude: lastLoc.coords.latitude,
+          longitude: lastLoc.coords.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }, 800);
+      } else {
+        mapRef.current?.animateToRegion(UTEM_REGION, 800);
+      }
     }
   };
 
@@ -308,7 +339,7 @@ export default function PassengerHomeScreen() {
             initialRegion={UTEM_REGION}
             onPress={handleMapPress}
             onPoiClick={handlePoiClick}
-            showsUserLocation
+            showsUserLocation={!!locationPermission}
             showsMyLocationButton={false}
             showsCompass={false}
             mapType="standard"

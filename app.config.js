@@ -8,6 +8,10 @@ module.exports = {
     scheme: "utemride",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
+    updates: {
+      enabled: false,
+      checkOnLaunch: "NEVER"
+    },
     ios: {
       supportsTablet: true,
       config: {

@@ -34,6 +34,13 @@ export default function PassengerLayout() {
         }}
       />
       <Tabs.Screen
+        name="carpool-slots"
+        options={{
+          title: 'Carpool',
+          tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="history"
         options={{
           title: 'History',

@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, Gender } from '@/contexts/AuthContext';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -21,6 +21,7 @@ export default function RegisterScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [gender, setGender] = useState<Gender>('Male');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,7 +32,7 @@ export default function RegisterScreen() {
     if (!isValid) return;
     setLoading(true);
     try {
-      await register(name, email, phone, password);
+      await register(name, email, phone, gender, password);
       router.replace('/(auth)/role-select');
     } catch {
       // TODO: error handling
@@ -69,6 +70,25 @@ export default function RegisterScreen() {
               onChangeText={setConfirmPassword}
               secure
             />
+
+            {/* Gender Selection */}
+            <Text style={styles.label}>Gender</Text>
+            <View style={styles.genderRow}>
+              {(['Male', 'Female'] as Gender[]).map((g) => (
+                <TouchableOpacity
+                  key={g}
+                  style={[styles.genderBtn, gender === g && styles.genderBtnActive]}
+                  onPress={() => setGender(g)}
+                >
+                  <Ionicons 
+                    name={g === 'Male' ? 'male' : 'female'} 
+                    size={18} 
+                    color={gender === g ? Colors.white : Colors.gray500} 
+                  />
+                  <Text style={[styles.genderText, gender === g && styles.genderTextActive]}>{g}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
             {password && confirmPassword && password !== confirmPassword && (
               <Text style={styles.errorText}>Passwords do not match</Text>
@@ -193,6 +213,43 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     marginBottom: Spacing.md,
     marginLeft: Spacing.xs,
+  },
+  label: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.gray700,
+    marginBottom: Spacing.xs,
+    marginLeft: Spacing.xs,
+  },
+  genderRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  genderBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.gray50,
+  },
+  genderBtnActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  genderText: {
+    fontSize: FontSize.md,
+    color: Colors.gray700,
+    fontWeight: FontWeight.medium,
+  },
+  genderTextActive: {
+    color: Colors.white,
+    fontWeight: FontWeight.bold,
   },
   registerBtn: {
     borderRadius: BorderRadius.md,

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 export type UserRole = 'passenger' | 'driver';
+export type Gender = 'Male' | 'Female' | 'Other';
 
 export interface User {
   id: string;
@@ -8,6 +9,7 @@ export interface User {
   email: string;
   phone: string;
   role: UserRole;
+  gender: Gender;
 }
 
 interface AuthContextType {
@@ -15,7 +17,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   role: UserRole;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, phone: string, password: string) => Promise<void>;
+  register: (name: string, email: string, phone: string, gender: Gender, password: string) => Promise<void>;
   logout: () => void;
   switchRole: () => void;
   setRole: (role: UserRole) => void;
@@ -35,10 +37,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: _email,
       phone: '+60123456789',
       role,
+      gender: 'Male',
     });
   }, [role]);
 
-  const register = useCallback(async (name: string, email: string, phone: string, _password: string) => {
+  const register = useCallback(async (name: string, email: string, phone: string, gender: Gender, _password: string) => {
     // TODO: Replace with real backend auth
     setUser({
       id: '1',
@@ -46,6 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email,
       phone,
       role,
+      gender,
     });
   }, [role]);
 

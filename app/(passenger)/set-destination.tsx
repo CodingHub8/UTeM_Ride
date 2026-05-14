@@ -1,25 +1,29 @@
-import { BorderRadius, Colors, FontSize, FontWeight, Spacing, Shadows } from '@/constants/theme';
+import { BorderRadius, Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useState, useEffect } from 'react';
-import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { FlatList, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { getCurrentLocationAddress, getDirections, getNearbyPlaces, getPlaceAutocomplete, getPlaceDetails } from '@/utils/location';
+import { getCurrentLocationAddress, getDirections, getNearbyPlaces, getPlaceAutocomplete, getPlaceDetails, getRecentDestinations } from '@/utils/location';
 
 const BASE_FARES = {
-  economy: 2.50,
-  comfort: 4.50,
-  premium: 8.00
+  economy: 2.00,
+  comfort: 4.00,
+  premium: 7.00,
+  motorcycle: 1.50,
+  carpool: 1.00
 };
 
-const RATE_PER_KM = 1.20; // RM 1.20 per km
+const RATE_PER_KM = 1.00; // Lowered to RM 1.00 per km
 
 const RIDE_TYPES = [
   { id: 'economy', name: 'Economy', icon: '🚗', basePrice: BASE_FARES.economy, seats: 4 },
   { id: 'comfort', name: 'Comfort', icon: '🚙', basePrice: BASE_FARES.comfort, seats: 4 },
   { id: 'premium', name: 'Premium', icon: '✨', basePrice: BASE_FARES.premium, seats: 6 },
+  { id: 'motorcycle', name: 'Motorcycle', icon: '🏍️', basePrice: BASE_FARES.motorcycle, seats: 2 },
+  { id: 'carpool', name: 'Car Pool', icon: '👥', basePrice: BASE_FARES.carpool, seats: 3 },
 ];
 
 // We've removed hardcoded PLACES to prioritize map selection
@@ -28,7 +32,7 @@ export default function SetDestinationScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDark } = useTheme();
-  const { initialDestination, destLat, destLng } = useLocalSearchParams<{ 
+  const { initialDestination, destLat, destLng } = useLocalSearchParams<{
     initialDestination?: string,
     destLat?: string,
     destLng?: string
@@ -38,20 +42,27 @@ export default function SetDestinationScreen() {
   const [selectedPlace, setSelectedPlace] = useState<string | null>(null);
   const [selectedRide, setSelectedRide] = useState('economy');
   const [pickupAddress, setPickupAddress] = useState('Fetching current location...');
-  const [pickupCoords, setPickupCoords] = useState<{latitude: number, longitude: number} | null>(null);
+  const [pickupCoords, setPickupCoords] = useState<{ latitude: number, longitude: number } | null>(null);
   const [routeData, setRouteData] = useState<any>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [recommendedPlaces, setRecommendedPlaces] = useState<any[]>([]);
   const [autocompletePlaces, setAutocompletePlaces] = useState<any[]>([]);
-  const [selectedCoords, setSelectedCoords] = useState<{latitude: number, longitude: number} | null>(null);
+  const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
+  const [selectedCoords, setSelectedCoords] = useState<{ latitude: number, longitude: number } | null>(null);
+  const [genderFilter, setGenderFilter] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [scheduledTime, setScheduledTime] = useState<string | null>(null);
 
   useEffect(() => {
-    if (pickupCoords) {
-      (async () => {
+    (async () => {
+      const recent = await getRecentDestinations();
+      setRecentPlaces(recent);
+
+      if (pickupCoords) {
         const recommended = await getNearbyPlaces(pickupCoords.latitude, pickupCoords.longitude);
         setRecommendedPlaces(recommended);
-      })();
-    }
+      }
+    })();
   }, [pickupCoords]);
 
   // Handle autocomplete as user types
@@ -86,14 +97,14 @@ export default function SetDestinationScreen() {
         setIsSearching(true);
         try {
           let destination: string | { lat: number, lng: number } = selectedPlace;
-          
+
           // Use precise coordinates if we have them
           if (selectedCoords) {
             destination = { lat: selectedCoords.latitude, lng: selectedCoords.longitude };
           } else if (destLat && destLng && selectedPlace === initialDestination) {
             destination = { lat: parseFloat(destLat), lng: parseFloat(destLng) };
           }
-          
+
           const directions = await getDirections(pickupAddress, destination);
           if (directions) {
             setRouteData(directions);
@@ -117,11 +128,11 @@ export default function SetDestinationScreen() {
     if (initialDestination) {
       setQuery(initialDestination);
       setSelectedPlace(initialDestination);
-      
+
       if (destLat && destLng) {
-        setSelectedCoords({ 
-          latitude: parseFloat(destLat as string), 
-          longitude: parseFloat(destLng as string) 
+        setSelectedCoords({
+          latitude: parseFloat(destLat as string),
+          longitude: parseFloat(destLng as string)
         });
       }
     }
@@ -129,7 +140,7 @@ export default function SetDestinationScreen() {
 
   const filtered = query.length > 0
     ? (autocompletePlaces.length > 0 ? autocompletePlaces : (query === initialDestination ? [{ id: 'map', name: query, address: 'Map Selection', isMap: true }] : []))
-    : recommendedPlaces;
+    : [...recentPlaces.map(p => ({ ...p, isRecent: true })), ...recommendedPlaces];
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? Colors.darkBg : Colors.white },
@@ -137,9 +148,9 @@ export default function SetDestinationScreen() {
     text: { color: isDark ? Colors.white : Colors.gray900 },
     subText: { color: isDark ? Colors.gray400 : Colors.gray500 },
     border: { borderBottomColor: isDark ? Colors.darkBorder : Colors.gray100 },
-    inputContainer: { 
+    inputContainer: {
       backgroundColor: isDark ? Colors.gray900 : Colors.gray50,
-      borderColor: isDark ? Colors.darkBorder : Colors.gray200 
+      borderColor: isDark ? Colors.darkBorder : Colors.gray200
     }
   };
 
@@ -184,11 +195,14 @@ export default function SetDestinationScreen() {
                 autoFocus
               />
               {query.length > 0 && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => {
                     setQuery('');
                     setSelectedPlace(null);
                     setRouteData(null);
+                    setSelectedCoords(null);
+                    // Clear the params so that clicking the same item again triggers the effect
+                    router.setParams({ initialDestination: '', destLat: '', destLng: '' });
                   }}
                   style={styles.clearBtn}
                 >
@@ -202,8 +216,10 @@ export default function SetDestinationScreen() {
 
       {!selectedPlace ? (
         <View style={{ flex: 1 }}>
-          {query.length === 0 && recommendedPlaces.length > 0 && (
-            <Text style={[styles.sectionTitle, dynamicStyles.text, { marginHorizontal: Spacing.md, marginTop: Spacing.md, marginBottom: 0 }]}>Recommended for you</Text>
+          {query.length === 0 && (
+            <Text style={[styles.sectionTitle, dynamicStyles.text, { marginHorizontal: Spacing.md, marginTop: Spacing.md, marginBottom: 0 }]}>
+              {recentPlaces.length > 0 ? 'Recent & Recommended' : 'Recommended for you'}
+            </Text>
           )}
           <FlatList
             data={filtered}
@@ -212,10 +228,10 @@ export default function SetDestinationScreen() {
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={[styles.resultRow, dynamicStyles.border]}
-                onPress={async () => { 
-                  setSelectedPlace(item.name); 
+                onPress={async () => {
+                  setSelectedPlace(item.name);
                   setQuery(item.name);
-                  
+
                   // Fetch precise coordinates if it's an autocomplete result or recommended place
                   if (item.isAutocomplete) {
                     const details = await getPlaceDetails(item.id);
@@ -228,7 +244,11 @@ export default function SetDestinationScreen() {
                 }}
               >
                 <View style={[styles.resultIcon, { backgroundColor: isDark ? Colors.primary + '30' : Colors.primary + '12' }]}>
-                  <Ionicons name={item.isMap ? "pin" : (item.isAutocomplete ? "search" : "location")} size={20} color={isDark ? Colors.primaryLight : Colors.primary} />
+                  <Ionicons
+                    name={item.isMap ? "pin" : (item.isAutocomplete ? "search" : (item.isRecent ? "time" : "location"))}
+                    size={20}
+                    color={isDark ? Colors.primaryLight : Colors.primary}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.resultName, dynamicStyles.text]} numberOfLines={1}>{item.name}</Text>
@@ -239,75 +259,162 @@ export default function SetDestinationScreen() {
           />
         </View>
       ) : (
-        <View style={styles.rideSection}>
-          <Text style={[styles.sectionTitle, dynamicStyles.text]}>Choose your ride</Text>
-          {RIDE_TYPES.map((r) => (
-            <TouchableOpacity
-              key={r.id}
-              style={[
-                styles.rideCard, 
-                { backgroundColor: isDark ? Colors.darkCard : Colors.white, borderColor: isDark ? Colors.darkBorder : Colors.gray200 },
-                selectedRide === r.id && { borderColor: Colors.primary, backgroundColor: isDark ? Colors.primary + '20' : Colors.primary + '08' }
-              ]}
-              onPress={() => setSelectedRide(r.id)}
-            >
-              <Text style={{ fontSize: 28, marginRight: 12 }}>{r.icon}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.rideName, dynamicStyles.text]}>{r.name}</Text>
-                <Text style={[styles.rideEta, dynamicStyles.subText]}>
-                  {isSearching ? 'Calculating...' : (routeData?.duration || '--')} · {r.seats} seats
+        <>
+          <ScrollView style={styles.rideSection} showsVerticalScrollIndicator={false}>
+            {/* ... rest of ScrollView content ... */}
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, dynamicStyles.text, { marginBottom: 0 }]}>Choose your ride</Text>
+              <TouchableOpacity
+                style={[styles.scheduleBtn, scheduledTime && { backgroundColor: Colors.primary + '20', borderColor: Colors.primary }]}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Ionicons name="time-outline" size={18} color={scheduledTime ? Colors.primary : Colors.gray500} />
+                <Text style={[styles.scheduleBtnText, { color: scheduledTime ? Colors.primary : Colors.gray500 }]}>
+                  {scheduledTime || 'Now'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {RIDE_TYPES.map((r) => (
+              <TouchableOpacity
+                key={r.id}
+                style={[
+                  styles.rideCard,
+                  { backgroundColor: isDark ? Colors.darkCard : Colors.white, borderColor: isDark ? Colors.darkBorder : Colors.gray200 },
+                  selectedRide === r.id && { borderColor: Colors.primary, backgroundColor: isDark ? Colors.primary + '20' : Colors.primary + '08' }
+                ]}
+                onPress={() => {
+                  setSelectedRide(r.id);
+                  if (r.id !== 'motorcycle') setGenderFilter(false);
+                }}
+              >
+                <Text style={{ fontSize: 28, marginRight: 12 }}>{r.icon}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.rideName, dynamicStyles.text]}>{r.name}</Text>
+                  <Text style={[styles.rideEta, dynamicStyles.subText]}>
+                    {isSearching ? 'Calculating...' : (routeData?.duration || '--')} · {r.seats} seats
+                  </Text>
+                </View>
+                <Text style={[styles.ridePrice, { color: isDark ? Colors.white : Colors.gray700 }, selectedRide === r.id && { color: isDark ? Colors.primaryLight : Colors.primary }]}>
+                  {isSearching ? 'RM --' : calculateFare(r.basePrice)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+
+            {selectedRide === 'motorcycle' && (
+              <View style={[styles.filterCard, { backgroundColor: isDark ? Colors.darkCard : Colors.white, borderColor: isDark ? Colors.darkBorder : Colors.gray200 }]}>
+                <View style={styles.filterInfo}>
+                  <Ionicons name="people-outline" size={20} color={Colors.primary} />
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={[styles.filterTitle, dynamicStyles.text]}>Gender Matching</Text>
+                    <Text style={[styles.filterSub, dynamicStyles.subText]}>Match with same-gender drivers only</Text>
+                  </View>
+                  <Switch
+                    value={genderFilter}
+                    onValueChange={setGenderFilter}
+                    trackColor={{ false: Colors.gray300, true: Colors.primary }}
+                  />
+                </View>
+              </View>
+            )}
+
+            {selectedRide === 'carpool' && (
+              <TouchableOpacity
+                style={[styles.poolListBtn, { backgroundColor: Colors.primary }]}
+                onPress={() => router.push('/(passenger)/carpool-slots')}
+              >
+                <Text style={styles.poolListText}>View Available Pools</Text>
+                <Ionicons name="chevron-forward" size={20} color={Colors.white} />
+              </TouchableOpacity>
+            )}
+
+            <View style={[styles.fareCard, { backgroundColor: isDark ? Colors.gray900 : Colors.gray50 }]}>
+              <View style={styles.fareRow}>
+                <Text style={[styles.fareLabel, dynamicStyles.subText]}>Estimated fare</Text>
+                <Text style={[styles.fareVal, { color: isDark ? Colors.primaryLight : Colors.primary }]}>
+                  {calculateFare(RIDE_TYPES.find(r => r.id === selectedRide)?.basePrice || 0)}
                 </Text>
               </View>
-              <Text style={[styles.ridePrice, { color: isDark ? Colors.white : Colors.gray700 }, selectedRide === r.id && { color: isDark ? Colors.primaryLight : Colors.primary }]}>
-                {isSearching ? 'RM --' : calculateFare(r.basePrice)}
+              <View style={styles.fareRow}>
+                <Text style={[styles.fareLabel, dynamicStyles.subText]}>Distance</Text>
+                <Text style={[styles.fareDetail, { color: isDark ? Colors.gray300 : Colors.gray700 }]}>{routeData?.distance || '--'}</Text>
+              </View>
+              <View style={styles.fareRow}>
+                <Text style={[styles.fareLabel, dynamicStyles.subText]}>Duration</Text>
+                <Text style={[styles.fareDetail, { color: isDark ? Colors.gray300 : Colors.gray700 }]}>{routeData?.duration || '--'}</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.confirmBtn, isSearching && { opacity: 0.7 }]}
+              disabled={isSearching || !routeData}
+              onPress={() => {
+                const ride = RIDE_TYPES.find(r => r.id === selectedRide);
+                const fare = calculateFare(ride?.basePrice || 0);
+
+                router.push({
+                  pathname: '/(passenger)/ride-request',
+                  params: {
+                    destination: selectedPlace,
+                    address: selectedPlace,
+                    rideType: ride?.name,
+                    price: fare,
+                    pickupAddress: pickupAddress,
+                    pickupLat: pickupCoords?.latitude,
+                    pickupLng: pickupCoords?.longitude,
+                    destLat: selectedCoords?.latitude?.toString() || destLat,
+                    destLng: selectedCoords?.longitude?.toString() || destLng,
+                    distance: routeData?.distance,
+                    duration: routeData?.duration,
+                    polyline: JSON.stringify(routeData?.polyline),
+                    scheduledTime: scheduledTime || undefined,
+                    genderMatch: genderFilter ? 'true' : 'false'
+                  }
+                });
+              }}
+            >
+              <Text style={styles.confirmText}>
+                {scheduledTime ? `Schedule Ride for ${scheduledTime}` : 'Confirm Destination'}
               </Text>
             </TouchableOpacity>
-          ))}
-          <View style={[styles.fareCard, { backgroundColor: isDark ? Colors.gray900 : Colors.gray50 }]}>
-            <View style={styles.fareRow}>
-              <Text style={[styles.fareLabel, dynamicStyles.subText]}>Estimated fare</Text>
-              <Text style={[styles.fareVal, { color: isDark ? Colors.primaryLight : Colors.primary }]}>
-                {calculateFare(RIDE_TYPES.find(r => r.id === selectedRide)?.basePrice || 0)}
-              </Text>
+            <View style={{ height: 20 }} />
+          </ScrollView>
+
+          {/* Mock Date Picker Modal */}
+          <Modal visible={showDatePicker} transparent animationType="slide">
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, { backgroundColor: isDark ? Colors.darkCard : Colors.white }]}>
+                <Text style={[styles.modalTitle, dynamicStyles.text]}>Schedule Booking</Text>
+                <Text style={[styles.modalSub, dynamicStyles.subText]}>Select a time for your ride</Text>
+
+                <View style={styles.timeGrid}>
+                  {['08:00 AM', '10:00 AM', '12:00 PM', '02:00 PM', '04:00 PM', '06:00 PM'].map((time) => (
+                    <TouchableOpacity
+                      key={time}
+                      style={[styles.timeChip, scheduledTime === time && { backgroundColor: Colors.primary }]}
+                      onPress={() => {
+                        setScheduledTime(time);
+                        setShowDatePicker(false);
+                      }}
+                    >
+                      <Text style={[styles.timeText, { color: isDark ? Colors.white : Colors.gray900 }, scheduledTime === time && { color: Colors.white }]}>{time}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.modalCloseBtn, { backgroundColor: isDark ? Colors.gray800 : Colors.gray100 }]}
+                  onPress={() => {
+                    setScheduledTime(null);
+                    setShowDatePicker(false);
+                  }}
+                >
+                  <Text style={[styles.modalCloseText, dynamicStyles.text]}>Clear / Book for Now</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.fareRow}>
-              <Text style={[styles.fareLabel, dynamicStyles.subText]}>Distance</Text>
-              <Text style={[styles.fareDetail, { color: isDark ? Colors.gray300 : Colors.gray700 }]}>{routeData?.distance || '--'}</Text>
-            </View>
-            <View style={styles.fareRow}>
-              <Text style={[styles.fareLabel, dynamicStyles.subText]}>Duration</Text>
-              <Text style={[styles.fareDetail, { color: isDark ? Colors.gray300 : Colors.gray700 }]}>{routeData?.duration || '--'}</Text>
-            </View>
-          </View>
-          <TouchableOpacity 
-            style={[styles.confirmBtn, isSearching && { opacity: 0.7 }]} 
-            disabled={isSearching || !routeData}
-            onPress={() => {
-              const ride = RIDE_TYPES.find(r => r.id === selectedRide);
-              const fare = calculateFare(ride?.basePrice || 0);
-              
-              router.push({
-                pathname: '/(passenger)/ride-request',
-                params: { 
-                  destination: selectedPlace,
-                  address: selectedPlace, // Use the display name
-                  rideType: ride?.name,
-                  price: fare,
-                  pickupAddress: pickupAddress,
-                  pickupLat: pickupCoords?.latitude,
-                  pickupLng: pickupCoords?.longitude,
-                  destLat: selectedCoords?.latitude?.toString() || destLat,
-                  destLng: selectedCoords?.longitude?.toString() || destLng,
-                  distance: routeData?.distance,
-                  duration: routeData?.duration,
-                  polyline: JSON.stringify(routeData?.polyline)
-                }
-              });
-            }}
-          >
-            <Text style={styles.confirmText}>Confirm Destination</Text>
-          </TouchableOpacity>
-        </View>
+          </Modal>
+        </>
       )}
     </View>
   );
@@ -334,12 +441,20 @@ const styles = StyleSheet.create({
   resultName: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.gray900 },
   resultAddr: { fontSize: FontSize.xs, color: Colors.gray400, marginTop: 2 },
   rideSection: { flex: 1, padding: Spacing.md },
-  sectionTitle: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.gray900, marginBottom: Spacing.md },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md },
+  sectionTitle: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.gray900 },
+  scheduleBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.gray200 },
+  scheduleBtnText: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold },
   rideCard: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 2, borderColor: Colors.gray200, marginBottom: Spacing.sm },
-  rideSelected: { borderColor: Colors.primary, backgroundColor: Colors.primary + '08' },
   rideName: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.gray900 },
   rideEta: { fontSize: FontSize.sm, color: Colors.gray500, marginTop: 2 },
   ridePrice: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.gray700 },
+  filterCard: { padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.gray200, marginBottom: Spacing.sm },
+  filterInfo: { flexDirection: 'row', alignItems: 'center' },
+  filterTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold },
+  filterSub: { fontSize: FontSize.xs, marginTop: 2 },
+  poolListBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: Spacing.md, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
+  poolListText: { color: Colors.white, fontSize: FontSize.md, fontWeight: FontWeight.bold },
   fareCard: { backgroundColor: Colors.gray50, borderRadius: BorderRadius.md, padding: Spacing.md, marginVertical: Spacing.sm },
   fareRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: Spacing.xs },
   fareLabel: { fontSize: FontSize.sm, color: Colors.gray500 },
@@ -347,4 +462,13 @@ const styles = StyleSheet.create({
   fareDetail: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.gray700 },
   confirmBtn: { backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingVertical: 16, alignItems: 'center' },
   confirmText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: FontWeight.bold },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, padding: Spacing.lg },
+  modalTitle: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, marginBottom: 4 },
+  modalSub: { fontSize: FontSize.sm, marginBottom: Spacing.lg },
+  timeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: Spacing.xl },
+  timeChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.gray200 },
+  timeText: { fontSize: FontSize.sm, fontWeight: FontWeight.medium },
+  modalCloseBtn: { paddingVertical: 14, alignItems: 'center', borderRadius: BorderRadius.md },
+  modalCloseText: { fontSize: FontSize.md, fontWeight: FontWeight.bold },
 });

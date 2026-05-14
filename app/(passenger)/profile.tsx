@@ -42,7 +42,8 @@ export default function PassengerProfileScreen() {
       <View style={[styles.card, dynamicStyles.card]}>
         <ProfileRow icon="person-outline" label="Full Name" value={user?.name ?? 'Guest'} isDark={isDark} />
         <ProfileRow icon="mail-outline" label="Email" value={user?.email ?? 'guest@utem.edu.my'} isDark={isDark} />
-        <ProfileRow icon="call-outline" label="Phone" value={user?.phone ?? '+60123456789'} isDark={isDark} last />
+        <ProfileRow icon="call-outline" label="Phone" value={user?.phone ?? '+60123456789'} isDark={isDark} />
+        <ProfileRow icon="people-outline" label="Gender" value={user?.gender ?? 'Male'} isDark={isDark} last />
       </View>
 
       {/* Payment */}

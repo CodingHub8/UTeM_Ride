@@ -1,9 +1,15 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
+import { useEffect } from 'react';
 import Animated, { useAnimatedStyle, interpolateColor } from 'react-native-reanimated';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { Colors } from '@/constants/theme';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
 
 function MainLayout() {
   const { isDark, themeProgress } = useTheme();
@@ -18,6 +24,10 @@ function MainLayout() {
       ),
     };
   });
+
+  useEffect(() => {
+    SplashScreen.hideAsync();
+  }, []);
 
   return (
     <Animated.View style={animatedStyle}>
@@ -34,10 +44,12 @@ function MainLayout() {
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <MainLayout />
-      </AuthProvider>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <AuthProvider>
+          <MainLayout />
+        </AuthProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
