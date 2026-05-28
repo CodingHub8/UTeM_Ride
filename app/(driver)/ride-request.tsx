@@ -27,14 +27,14 @@ export default function DriverRideRequestScreen() {
             <Ionicons name="person" size={24} color={Colors.white} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.passengerName}>Nurul Aisyah</Text>
+            <Text style={styles.passengerName}>Passenger</Text>
             <View style={styles.ratingRow}>
               <Ionicons name="star" size={14} color={Colors.accent} />
-              <Text style={styles.ratingText}>4.8</Text>
+              <Text style={styles.ratingText}>--</Text>
             </View>
           </View>
           <View style={styles.priceBadge}>
-            <Text style={styles.priceText}>RM 5.50</Text>
+            <Text style={styles.priceText}>RM --</Text>
           </View>
         </View>
 
@@ -49,11 +49,11 @@ export default function DriverRideRequestScreen() {
             <View style={{ flex: 1 }}>
               <View style={{ marginBottom: Spacing.md }}>
                 <Text style={styles.routeLabel}>Pickup</Text>
-                <Text style={styles.routeValue}>Kolej Kediaman 3, UTeM</Text>
+                <Text style={styles.routeValue}>--</Text>
               </View>
               <View>
                 <Text style={styles.routeLabel}>Destination</Text>
-                <Text style={styles.routeValue}>Melaka Sentral</Text>
+                <Text style={styles.routeValue}>--</Text>
               </View>
             </View>
           </View>
@@ -63,19 +63,19 @@ export default function DriverRideRequestScreen() {
         <View style={styles.detailsRow}>
           <View style={styles.detailItem}>
             <Ionicons name="navigate" size={18} color={Colors.accent} />
-            <Text style={styles.detailValue}>2.3 km</Text>
+            <Text style={styles.detailValue}>--</Text>
             <Text style={styles.detailLabel}>To pickup</Text>
           </View>
           <View style={styles.detailDivider} />
           <View style={styles.detailItem}>
             <Ionicons name="car" size={18} color={Colors.accent} />
-            <Text style={styles.detailValue}>8.2 km</Text>
+            <Text style={styles.detailValue}>--</Text>
             <Text style={styles.detailLabel}>Trip distance</Text>
           </View>
           <View style={styles.detailDivider} />
           <View style={styles.detailItem}>
             <Ionicons name="time" size={18} color={Colors.accent} />
-            <Text style={styles.detailValue}>~15 min</Text>
+            <Text style={styles.detailValue}>--</Text>
             <Text style={styles.detailLabel}>Est. time</Text>
           </View>
         </View>

@@ -12,8 +12,8 @@ export default function CreatePoolScreen() {
   const { isDark } = useTheme();
   
   const [destination, setDestination] = useState('');
-  const [date, setDate] = useState('Tomorrow, 15 May');
-  const [time, setTime] = useState('08:30 AM');
+  const [date, setDate] = useState('Select date');
+  const [time, setTime] = useState('Select time');
   const [seats, setSeats] = useState(3);
   const [genderMatching, setGenderMatching] = useState(false);
 

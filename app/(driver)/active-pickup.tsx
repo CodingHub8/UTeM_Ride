@@ -72,8 +72,8 @@ export default function ActivePickupScreen() {
             <Ionicons name="person" size={24} color={Colors.white} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.passengerName}>Nurul Aisyah</Text>
-            <Text style={styles.pickupAddr}>Kolej Kediaman 3, UTeM</Text>
+            <Text style={styles.passengerName}>Passenger</Text>
+            <Text style={styles.pickupAddr}>--</Text>
           </View>
           <TouchableOpacity style={styles.contactBtn}>
             <Ionicons name="call" size={20} color={Colors.primary} />
@@ -95,7 +95,7 @@ export default function ActivePickupScreen() {
             onPress={() => router.push('/(driver)/trip-in-progress')}
           >
             <Ionicons name="checkmark-circle" size={22} color={Colors.white} />
-            <Text style={styles.arrivedText}>I've Arrived</Text>
+            <Text style={styles.arrivedText}>{"I've Arrived"}</Text>
           </TouchableOpacity>
         </View>
       </View>

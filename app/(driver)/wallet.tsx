@@ -3,14 +3,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 
-const TRANSACTIONS = [
-  { id: '1', type: 'trip', label: 'Trip to Melaka Sentral', amount: '+RM 5.50', time: '2:30 PM' },
-  { id: '2', type: 'trip', label: 'Trip to Dataran Pahlawan', amount: '+RM 4.00', time: '1:15 PM' },
-  { id: '3', type: 'trip', label: 'Trip to AEON Bandaraya', amount: '+RM 7.00', time: '11:40 AM' },
-  { id: '4', type: 'withdrawal', label: 'Withdrawal to Bank', amount: '-RM 50.00', time: 'Yesterday' },
-  { id: '5', type: 'trip', label: 'Trip to UTeM Campus', amount: '+RM 6.50', time: 'Yesterday' },
-  { id: '6', type: 'trip', label: 'Trip to Hospital Melaka', amount: '+RM 8.00', time: 'Yesterday' },
-];
+const TRANSACTIONS: { id: string; type: 'trip' | 'withdrawal'; label: string; amount: string; time: string }[] = [];
 
 export default function WalletScreen() {
   const insets = useSafeAreaInsets();
@@ -25,15 +18,15 @@ export default function WalletScreen() {
       {/* Balance card */}
       <View style={styles.balanceCard}>
         <Text style={styles.balanceLabel}>Available Balance</Text>
-        <Text style={styles.balanceValue}>RM 125.50</Text>
+        <Text style={styles.balanceValue}>RM 0.00</Text>
         <View style={styles.balanceStats}>
           <View style={styles.balanceStat}>
-            <Text style={styles.bStatValue}>RM 45.50</Text>
+            <Text style={styles.bStatValue}>RM 0.00</Text>
             <Text style={styles.bStatLabel}>Today</Text>
           </View>
           <View style={styles.balanceStatDivider} />
           <View style={styles.balanceStat}>
-            <Text style={styles.bStatValue}>RM 230.00</Text>
+            <Text style={styles.bStatValue}>RM 0.00</Text>
             <Text style={styles.bStatLabel}>This Week</Text>
           </View>
         </View>
@@ -48,17 +41,17 @@ export default function WalletScreen() {
         <View style={styles.todayRow}>
           <View style={styles.todayItem}>
             <Ionicons name="car" size={22} color={Colors.accent} />
-            <Text style={styles.todayValue}>6</Text>
+            <Text style={styles.todayValue}>0</Text>
             <Text style={styles.todayLabel}>Trips</Text>
           </View>
           <View style={styles.todayItem}>
             <Ionicons name="time" size={22} color={Colors.accent} />
-            <Text style={styles.todayValue}>4.2h</Text>
+            <Text style={styles.todayValue}>0h</Text>
             <Text style={styles.todayLabel}>Online</Text>
           </View>
           <View style={styles.todayItem}>
             <Ionicons name="navigate" size={22} color={Colors.accent} />
-            <Text style={styles.todayValue}>38 km</Text>
+            <Text style={styles.todayValue}>0 km</Text>
             <Text style={styles.todayLabel}>Driven</Text>
           </View>
         </View>

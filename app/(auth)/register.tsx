@@ -17,8 +17,7 @@ import { useAuth, Gender } from '@/contexts/AuthContext';
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { register } = useAuth();
-  const [name, setName] = useState('');
+  useAuth();
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [gender, setGender] = useState<Gender>('Male');
@@ -26,14 +25,17 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const isValid = name && email && phone && password && password === confirmPassword;
+  const isValid = email && phone && password && password === confirmPassword;
 
   const handleRegister = async () => {
     if (!isValid) return;
     setLoading(true);
     try {
-      await register(name, email, phone, gender, password);
-      router.replace('/(auth)/role-select');
+      // Navigate to the next step: document upload (name will be extracted via OCR)
+      router.push({
+        pathname: '/(auth)/document-upload' as any,
+        params: { email, phone, gender, password }
+      });
     } catch {
       // TODO: error handling
     } finally {
@@ -59,7 +61,6 @@ export default function RegisterScreen() {
 
           {/* Card */}
           <View style={styles.card}>
-            <InputField icon="person-outline" placeholder="Full name" value={name} onChangeText={setName} />
             <InputField icon="mail-outline" placeholder="Email address" value={email} onChangeText={setEmail} keyboardType="email-address" />
             <InputField icon="call-outline" placeholder="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
             <InputField icon="lock-closed-outline" placeholder="Password" value={password} onChangeText={setPassword} secure />
@@ -106,7 +107,7 @@ export default function RegisterScreen() {
                 end={{ x: 1, y: 0 }}
                 style={styles.btnGradient}
               >
-                <Text style={styles.btnText}>{loading ? 'Creating account…' : 'Create Account'}</Text>
+                <Text style={styles.btnText}>{loading ? 'Proceeding…' : 'Next: Upload Documents'}</Text>
               </LinearGradient>
             </TouchableOpacity>
 

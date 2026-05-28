@@ -4,13 +4,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
 
-const RIDES = [
-  { id: '1', date: '7 May 2026', from: 'Current Location', to: 'UTeM Main Campus', price: 'RM 5.50', driver: 'Ahmad Razali', status: 'completed' },
-  { id: '2', date: '6 May 2026', from: 'Melaka Sentral', to: 'Dataran Pahlawan', price: 'RM 4.00', driver: 'Siti Aminah', status: 'completed' },
-  { id: '3', date: '5 May 2026', from: 'UTeM Main Campus', to: 'AEON Bandaraya', price: 'RM 7.00', driver: 'Mohd Hafiz', status: 'completed' },
-  { id: '4', date: '3 May 2026', from: 'UTeM City Campus', to: 'Melaka Sentral', price: 'RM 3.50', driver: 'Lee Wei', status: 'cancelled' },
-  { id: '5', date: '1 May 2026', from: 'Dataran Pahlawan', to: 'UTeM Main Campus', price: 'RM 6.50', driver: 'Nurul Huda', status: 'completed' },
-];
+const RIDES: {
+  id: string;
+  date: string;
+  from: string;
+  to: string;
+  price: string;
+  driver: string;
+  status: 'completed' | 'cancelled';
+}[] = [];
 
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();

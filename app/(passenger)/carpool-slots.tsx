@@ -6,11 +6,16 @@ import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/
 import { useTheme } from '@/contexts/ThemeContext';
 import { useState } from 'react';
 
-const MOCK_POOLS = [
-  { id: '1', driver: 'Ahmad', rating: 4.8, destination: 'UTeM Main Campus', time: '08:30 AM', date: '15 May', seats: 2, price: 'RM 1.50' },
-  { id: '2', driver: 'Siti', rating: 4.9, destination: 'UTeM Technology Campus', time: '09:00 AM', date: '15 May', seats: 1, price: 'RM 2.00' },
-  { id: '3', driver: 'Kumar', rating: 4.7, destination: 'Melaka Sentral', time: '10:15 AM', date: '15 May', seats: 3, price: 'RM 3.50' },
-];
+const MOCK_POOLS: {
+  id: string;
+  driver: string;
+  rating: number;
+  destination: string;
+  time: string;
+  date: string;
+  seats: number;
+  price: string;
+}[] = [];
 
 export default function CarpoolSlotsScreen() {
   const insets = useSafeAreaInsets();

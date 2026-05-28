@@ -6,18 +6,9 @@ import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// Mock coordinates for tracking
-const PICKUP_COORD = { latitude: 2.3135, longitude: 102.3211 };
-const DEST_COORD = { latitude: 2.3086, longitude: 102.3197 };
-const DRIVER_COORD = { latitude: 2.3125, longitude: 102.3215 }; // Driver is approaching
-
-const ROUTE_POINTS = [
-  PICKUP_COORD,
-  { latitude: 2.3125, longitude: 102.3215 },
-  { latitude: 2.3115, longitude: 102.3205 },
-  { latitude: 2.3105, longitude: 102.3195 },
-  DEST_COORD,
-];
+// Default fallback coordinates
+const DEFAULT_PICKUP = { latitude: 2.3135, longitude: 102.3211 };
+const DEFAULT_DEST = { latitude: 2.3086, longitude: 102.3197 };
 
 const DARK_MAP_STYLE = [
   { "elementType": "geometry", "stylers": [{ "color": "#242f3e" }] },
@@ -51,13 +42,13 @@ export default function ActiveRideScreen() {
 
   const pickupCoord = pickupLat && pickupLng 
     ? { latitude: parseFloat(pickupLat), longitude: parseFloat(pickupLng) }
-    : PICKUP_COORD;
+    : DEFAULT_PICKUP;
 
   const destCoord = polyline 
     ? JSON.parse(polyline)[JSON.parse(polyline).length - 1]
-    : DEST_COORD;
+    : DEFAULT_DEST;
 
-  const driverCoord = DRIVER_COORD;
+  const driverCoord = DEFAULT_PICKUP;
 
   const routePoints = polyline ? JSON.parse(polyline) : [
     pickupCoord,
@@ -133,11 +124,11 @@ export default function ActiveRideScreen() {
             <Ionicons name="person" size={28} color={Colors.white} />
           </View>
           <View style={styles.driverInfo}>
-            <Text style={[styles.driverName, dynamicStyles.text]}>Ahmad Razali</Text>
+            <Text style={[styles.driverName, dynamicStyles.text]}>Your Driver</Text>
             <View style={styles.ratingRow}>
               <Ionicons name="star" size={14} color={Colors.accent} />
-              <Text style={[styles.ratingText, dynamicStyles.text]}>4.9</Text>
-              <Text style={styles.tripCount}>· 342 trips</Text>
+              <Text style={[styles.ratingText, dynamicStyles.text]}>--</Text>
+              <Text style={styles.tripCount}>· -- trips</Text>
             </View>
           </View>
           <View style={styles.actionBtns}>
@@ -156,11 +147,11 @@ export default function ActiveRideScreen() {
             <Text style={styles.vehicleIcon}>🚗</Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.vehicleName, dynamicStyles.text]}>Perodua Myvi</Text>
-            <Text style={[styles.vehiclePlate, dynamicStyles.subText]}>WKL 2847</Text>
+            <Text style={[styles.vehicleName, dynamicStyles.text]}>--</Text>
+            <Text style={[styles.vehiclePlate, dynamicStyles.subText]}>--</Text>
           </View>
           <View style={[styles.colorDot, isDark && { borderColor: Colors.darkBorder }]} />
-          <Text style={[styles.vehicleColor, dynamicStyles.subText]}>White</Text>
+          <Text style={[styles.vehicleColor, dynamicStyles.subText]}>--</Text>
         </View>
 
         <View style={[styles.divider, dynamicStyles.divider]} />

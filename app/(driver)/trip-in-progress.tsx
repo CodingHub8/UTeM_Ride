@@ -79,11 +79,11 @@ export default function TripInProgressScreen() {
           <View style={{ flex: 1 }}>
             <View style={{ marginBottom: Spacing.md }}>
               <Text style={styles.routeLabel}>Picked up from</Text>
-              <Text style={styles.routeValue}>Kolej Kediaman 3, UTeM</Text>
+              <Text style={styles.routeValue}>--</Text>
             </View>
             <View>
               <Text style={styles.routeLabel}>Heading to</Text>
-              <Text style={styles.routeValue}>Melaka Sentral</Text>
+              <Text style={styles.routeValue}>--</Text>
             </View>
           </View>
         </View>
@@ -94,17 +94,17 @@ export default function TripInProgressScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statLabel}>Earnings</Text>
-            <Text style={styles.statValueAccent}>RM 5.50</Text>
+            <Text style={styles.statValueAccent}>RM --</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statLabel}>Distance</Text>
-            <Text style={styles.statValue}>8.2 km</Text>
+            <Text style={styles.statValue}>--</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statLabel}>ETA</Text>
-            <Text style={styles.statValue}>12 min</Text>
+            <Text style={styles.statValue}>--</Text>
           </View>
         </View>
 

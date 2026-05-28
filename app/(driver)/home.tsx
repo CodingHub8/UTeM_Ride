@@ -62,16 +62,16 @@ export default function DriverHomeScreen() {
         {/* Earnings */}
         <View style={styles.earningsCard}>
           <View>
-            <Text style={styles.earningsLabel}>Today's Earnings</Text>
-            <Text style={styles.earningsValue}>RM 45.50</Text>
+            <Text style={styles.earningsLabel}>{"Today's Earnings"}</Text>
+            <Text style={styles.earningsValue}>RM 0.00</Text>
           </View>
           <View style={styles.earningsRight}>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>6</Text>
+              <Text style={styles.statValue}>0</Text>
               <Text style={styles.statLabel}>Trips</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>4.2h</Text>
+              <Text style={styles.statValue}>0h</Text>
               <Text style={styles.statLabel}>Online</Text>
             </View>
           </View>

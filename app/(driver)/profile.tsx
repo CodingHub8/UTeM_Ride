@@ -28,25 +28,17 @@ export default function DriverProfileScreen() {
       {/* Vehicle info */}
       <Text style={styles.sectionTitle}>Vehicle Information</Text>
       <View style={styles.card}>
-        <DriverRow icon="car" label="Vehicle" value="Perodua Myvi 2023" />
-        <DriverRow icon="document-text" label="Plate Number" value="WKL 2847" />
-        <DriverRow icon="color-palette" label="Color" value="White" last />
-      </View>
-
-      {/* License */}
-      <Text style={styles.sectionTitle}>License & Documents</Text>
-      <View style={styles.card}>
-        <DriverRow icon="card" label="Driving License" value="Active" valueColor={Colors.success} />
-        <DriverRow icon="shield-checkmark" label="Insurance" value="Verified" valueColor={Colors.success} />
-        <DriverRow icon="document" label="Vehicle Registration" value="Verified" valueColor={Colors.success} last />
+        <DriverRow icon="car" label="Vehicle" value={user?.vehicleModel ?? 'Not set'} />
+        <DriverRow icon="document-text" label="Plate Number" value={user?.vehiclePlate ?? 'Not set'} />
+        <DriverRow icon="color-palette" label="Color" value="Not set" last />
       </View>
 
       {/* Account */}
       <Text style={styles.sectionTitle}>Account</Text>
       <View style={styles.card}>
         <DriverRow icon="person-outline" label="Full Name" value={user?.name ?? 'Driver'} />
-        <DriverRow icon="mail-outline" label="Email" value={user?.email ?? 'driver@utem.edu.my'} />
-        <DriverRow icon="call-outline" label="Phone" value={user?.phone ?? '+60123456789'} last />
+        <DriverRow icon="mail-outline" label="Email" value={user?.email ?? 'Not set'} />
+        <DriverRow icon="call-outline" label="Phone" value={user?.phone ?? 'Not set'} last />
       </View>
 
       {/* Switch & Logout */}

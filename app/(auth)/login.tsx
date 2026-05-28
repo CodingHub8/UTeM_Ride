@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -23,16 +23,28 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const buttonScale = useRef(new Animated.Value(1)).current;
+  const buttonColor = useRef(new Animated.Value(0)).current;
+
+  const showError = useCallback((msg: string) => {
+    setErrorMsg(msg);
+    Animated.sequence([
+      Animated.timing(buttonColor, { toValue: 1, duration: 200, useNativeDriver: false }),
+      Animated.delay(1000),
+      Animated.timing(buttonColor, { toValue: 0, duration: 200, useNativeDriver: false }),
+    ]).start(() => setErrorMsg(''));
+  }, [buttonColor]);
 
   const handleLogin = async () => {
     if (!email || !password) return;
     setLoading(true);
+    setErrorMsg('');
     try {
       await login(email, password);
       router.replace('/(auth)/role-select');
     } catch {
-      // TODO: Show error toast
+      showError('Incorrect email/password!');
     } finally {
       setLoading(false);
     }
@@ -92,6 +104,7 @@ export default function LoginScreen() {
                 secureTextEntry={!showPassword}
                 value={password}
                 onChangeText={setPassword}
+                autoCapitalize="none"
               />
               <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
                 <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={Colors.gray400} />
@@ -113,14 +126,21 @@ export default function LoginScreen() {
                 disabled={loading || !email || !password}
                 activeOpacity={0.9}
               >
-                <LinearGradient
-                  colors={[Colors.primary, Colors.primaryLight]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.loginGradient}
+                <Animated.View
+                  style={[
+                    styles.loginGradient,
+                    {
+                      backgroundColor: buttonColor.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [Colors.primary, Colors.error],
+                      }),
+                    },
+                  ]}
                 >
-                  <Text style={styles.loginBtnText}>{loading ? 'Signing in…' : 'Sign In'}</Text>
-                </LinearGradient>
+                  <Text style={styles.loginBtnText}>
+                    {loading ? 'Signing in…' : errorMsg || 'Sign In'}
+                  </Text>
+                </Animated.View>
               </TouchableOpacity>
             </Animated.View>
 
@@ -146,7 +166,7 @@ export default function LoginScreen() {
 
             {/* Sign Up Link */}
             <View style={styles.signupRow}>
-              <Text style={styles.signupLabel}>Don't have an account? </Text>
+              <Text style={styles.signupLabel}>{"Don't have an account? "}</Text>
               <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
                 <Text style={styles.signupLink}>Sign Up</Text>
               </TouchableOpacity>
