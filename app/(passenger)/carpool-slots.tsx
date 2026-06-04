@@ -1,10 +1,10 @@
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
 const MOCK_POOLS: {
   id: string;
@@ -21,6 +21,7 @@ export default function CarpoolSlotsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDark } = useTheme();
+  const { user } = useAuth();
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? Colors.darkBg : Colors.gray50 },
@@ -28,6 +29,19 @@ export default function CarpoolSlotsScreen() {
     text: { color: isDark ? Colors.white : Colors.gray900 },
     subText: { color: isDark ? Colors.gray400 : Colors.gray500 },
     border: { borderBottomColor: isDark ? Colors.darkBorder : Colors.gray100 }
+  };
+
+  const handleJoinPool = (driverName: string) => {
+    if (user && !user.is_2FA_verified) {
+      Alert.alert(
+        '2FA Verification Required',
+        'To join pools, please verify your account using the 2FA link sent to your email/SMS. You can simulate this by clicking the banner on the home screen.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    Alert.alert('Success', `Requested to join ${driverName}'s pool!`);
+    router.back();
   };
 
   return (
@@ -45,6 +59,13 @@ export default function CarpoolSlotsScreen() {
         data={MOCK_POOLS}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="people-outline" size={64} color={isDark ? Colors.gray700 : Colors.gray300} />
+            <Text style={[styles.emptyText, dynamicStyles.text]}>No available pools for now.</Text>
+            <Text style={[styles.emptySub, dynamicStyles.subText]}>Check back later or schedule your own pool.</Text>
+          </View>
+        }
         renderItem={({ item }) => (
           <TouchableOpacity style={[styles.poolCard, dynamicStyles.card]}>
             <View style={styles.poolHeader}>
@@ -82,10 +103,7 @@ export default function CarpoolSlotsScreen() {
 
             <TouchableOpacity 
               style={styles.joinBtn}
-              onPress={() => {
-                alert(`Requested to join ${item.driver}'s pool!`);
-                router.back();
-              }}
+              onPress={() => handleJoinPool(item.driver)}
             >
               <Text style={styles.joinText}>Join Pool</Text>
             </TouchableOpacity>
@@ -101,7 +119,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm },
   backBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   headerTitle: { fontSize: FontSize.lg, fontWeight: FontWeight.bold },
-  listContent: { padding: Spacing.md },
+  listContent: { padding: Spacing.md, flexGrow: 1 },
   poolCard: { borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: Spacing.md, ...Shadows.md },
   poolHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   driverInfo: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
@@ -116,4 +134,7 @@ const styles = StyleSheet.create({
   detailText: { fontSize: FontSize.sm, fontWeight: FontWeight.medium },
   joinBtn: { backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingVertical: 12, alignItems: 'center' },
   joinText: { color: Colors.white, fontSize: FontSize.md, fontWeight: FontWeight.bold },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.xl, marginTop: 100 },
+  emptyText: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, marginTop: Spacing.md, textAlign: 'center' },
+  emptySub: { fontSize: FontSize.sm, marginTop: 4, textAlign: 'center' },
 });

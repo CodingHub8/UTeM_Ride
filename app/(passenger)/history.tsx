@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
+import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
@@ -38,6 +38,13 @@ export default function HistoryScreen() {
         data={RIDES}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="car-outline" size={64} color={isDark ? Colors.gray700 : Colors.gray300} />
+            <Text style={[styles.emptyText, dynamicStyles.text]}>You haven't booked any rides.</Text>
+            <Text style={[styles.emptySub, dynamicStyles.subText]}>Rides you request and complete will appear here.</Text>
+          </View>
+        }
         renderItem={({ item }) => (
           <View style={[styles.card, dynamicStyles.card]}>
             <View style={styles.cardTop}>
@@ -80,7 +87,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg, paddingBottom: Spacing.md },
   headerTitle: { fontSize: FontSize.xxl, fontWeight: FontWeight.bold },
   headerSub: { fontSize: FontSize.sm, color: Colors.gray400, marginTop: 4 },
-  list: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.lg },
+  list: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.lg, flexGrow: 1 },
   card: { borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: Spacing.sm, ...Shadows.sm },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm },
   date: { fontSize: FontSize.sm, fontWeight: FontWeight.medium },
@@ -97,4 +104,7 @@ const styles = StyleSheet.create({
   driverChip: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   driverName: { fontSize: FontSize.sm },
   price: { fontSize: FontSize.lg, fontWeight: FontWeight.bold },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.xl, marginTop: 100 },
+  emptyText: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, marginTop: Spacing.md, textAlign: 'center' },
+  emptySub: { fontSize: FontSize.sm, marginTop: 4, textAlign: 'center' },
 });

@@ -160,7 +160,7 @@ function parseOCRLines(lines: string[], type: 'matric_card' | 'road_tax'): OCRRe
         'TINGGI', 'NO', 'ID', 'MATRIC', 'NAMA', 'TARIKH', 'SAH', 'HINGGA',
         'ALAMAT', 'JANTINA', 'BANGSA', 'WARGANEGARA', 'DIPLOMA', 'IJAZAH',
         'SARJANA', 'PHD', 'DOKTOR', 'FAKULTI', 'PUSAT', 'INSTITUT', 'MYSISWA',
-        'MYDEBIT', 'ISLAMIC', 'KURSUS', 'MATRIK', 'RHB', 'VISA', 'DEBIT'
+        'MYDEBIT', 'ISLAMIC', 'KURSUS', 'MATRIK', 'RHB', 'VISA', 'DEBIT', ':'
       ];
       const potentialNames = lines.filter(line => {
         const upper = line.trim().toUpperCase();

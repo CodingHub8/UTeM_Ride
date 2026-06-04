@@ -1,23 +1,25 @@
+import { BorderRadius, Colors, FontSize, FontWeight, Shadows, Spacing } from '@/constants/theme';
+import { Gender, useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
-import { useAuth, Gender } from '@/contexts/AuthContext';
 
 export default function RegisterScreen() {
   const router = useRouter();
-  useAuth();
+  const { isDark } = useTheme();
+  
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [gender, setGender] = useState<Gender>('Male');
@@ -25,7 +27,64 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const isValid = email && phone && password && password === confirmPassword;
+  // Validation errors
+  const [emailError, setEmailError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+
+  const validateEmail = () => {
+    if (!email) {
+      setEmailError('');
+      return;
+    }
+    const endsWithUtem = email.endsWith('@student.utem.edu.my') || email.endsWith('@utem.edu.my');
+    if (!endsWithUtem) {
+      setEmailError('Only use UTeM provided email domains');
+    } else {
+      setEmailError('');
+    }
+  };
+
+  const validateAndFormatPhone = () => {
+    if (!phone) {
+      setPhoneError('');
+      return;
+    }
+    
+    // Clean all non-digit characters
+    let clean = phone.replace(/\D/g, '');
+    
+    // If it starts with 60, strip it to get the local part
+    if (clean.startsWith('60')) {
+      clean = clean.substring(2);
+    }
+    
+    // Ensure it starts with 0
+    if (clean.length > 0 && !clean.startsWith('0')) {
+      clean = '0' + clean;
+    }
+    
+    // Check if it's 11 digits starting with 011
+    if (clean.startsWith('011') && clean.length === 11) {
+      const part1 = clean.substring(3, 7);
+      const part2 = clean.substring(7);
+      const formatted = `+6011-${part1} ${part2}`;
+      setPhone(formatted);
+      setPhoneError('');
+    }
+    // Check if it's 10 digits starting with 01
+    else if (clean.startsWith('01') && !clean.startsWith('011') && clean.length === 10) {
+      const x = clean.charAt(2);
+      const part1 = clean.substring(3, 6);
+      const part2 = clean.substring(6);
+      const formatted = `+601${x}-${part1} ${part2}`;
+      setPhone(formatted);
+      setPhoneError('');
+    } else {
+      setPhoneError('Incorrect phone number format. E.g 011XXXXXXXX, 01XXXXXXXX');
+    }
+  };
+
+  const isValid = email && phone && password && password === confirmPassword && !emailError && !phoneError;
 
   const handleRegister = async () => {
     if (!isValid) return;
@@ -37,9 +96,20 @@ export default function RegisterScreen() {
         params: { email, phone, gender, password }
       });
     } catch {
-      // TODO: error handling
+      // error handling
     } finally {
       setLoading(false);
+    }
+  };
+
+  const dynamicStyles = {
+    card: { backgroundColor: isDark ? Colors.darkCard : Colors.white },
+    text: { color: isDark ? Colors.white : Colors.gray900 },
+    subText: { color: isDark ? Colors.gray400 : Colors.gray500 },
+    label: { color: isDark ? Colors.white : Colors.gray700 },
+    genderBtn: { 
+      backgroundColor: isDark ? Colors.gray900 : Colors.gray50,
+      borderColor: isDark ? Colors.darkBorder : Colors.gray200,
     }
   };
 
@@ -60,33 +130,97 @@ export default function RegisterScreen() {
           </View>
 
           {/* Card */}
-          <View style={styles.card}>
-            <InputField icon="mail-outline" placeholder="Email address" value={email} onChangeText={setEmail} keyboardType="email-address" />
-            <InputField icon="call-outline" placeholder="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-            <InputField icon="lock-closed-outline" placeholder="Password" value={password} onChangeText={setPassword} secure />
+          <View style={[styles.card, dynamicStyles.card]}>
+            <InputField 
+              icon="mail-outline" 
+              placeholder="Email address" 
+              value={email} 
+              onChangeText={(t) => { setEmail(t); if (emailError) setEmailError(''); }} 
+              keyboardType="email-address" 
+              onBlur={validateEmail}
+              error={emailError}
+              isDark={isDark}
+            />
+
+            {/* Email Suggestions */}
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              style={styles.suggestionsScroll}
+              contentContainerStyle={styles.suggestionsContainer}
+            >
+              {['@student.utem.edu.my', 'student.utem.edu.my', '@utem.edu.my', 'utem.edu.my'].map((suggestion) => (
+                <TouchableOpacity
+                  key={suggestion}
+                  style={[styles.suggestionChip, { backgroundColor: isDark ? Colors.gray800 : Colors.gray100 }]}
+                  onPress={() => {
+                    let localPart = email;
+                    if (email.includes('@')) {
+                      localPart = email.split('@')[0];
+                    }
+                    const cleanSuggestion = suggestion.startsWith('@') ? suggestion : `@${suggestion}`;
+                    const newEmail = `${localPart}${cleanSuggestion}`;
+                    setEmail(newEmail);
+                    
+                    const endsWithUtem = newEmail.endsWith('@student.utem.edu.my') || newEmail.endsWith('@utem.edu.my');
+                    if (!endsWithUtem) {
+                      setEmailError('Only use UTeM provided email domains');
+                    } else {
+                      setEmailError('');
+                    }
+                  }}
+                >
+                  <Text style={[styles.suggestionText, { color: isDark ? Colors.primaryLight : Colors.primary }]}>
+                    {suggestion}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <InputField 
+              icon="call-outline" 
+              placeholder="Phone number" 
+              value={phone} 
+              onChangeText={(t) => { setPhone(t); if (phoneError) setPhoneError(''); }} 
+              keyboardType="phone-pad" 
+              onBlur={validateAndFormatPhone}
+              error={phoneError}
+              isDark={isDark}
+            />
+            
+            <InputField 
+              icon="lock-closed-outline" 
+              placeholder="Password" 
+              value={password} 
+              onChangeText={setPassword} 
+              secure 
+              isDark={isDark}
+            />
+            
             <InputField
               icon="shield-checkmark-outline"
               placeholder="Confirm password"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secure
+              isDark={isDark}
             />
 
             {/* Gender Selection */}
-            <Text style={styles.label}>Gender</Text>
+            <Text style={[styles.label, dynamicStyles.label]}>Gender</Text>
             <View style={styles.genderRow}>
               {(['Male', 'Female'] as Gender[]).map((g) => (
                 <TouchableOpacity
                   key={g}
-                  style={[styles.genderBtn, gender === g && styles.genderBtnActive]}
+                  style={[styles.genderBtn, dynamicStyles.genderBtn, gender === g && styles.genderBtnActive]}
                   onPress={() => setGender(g)}
                 >
-                  <Ionicons 
-                    name={g === 'Male' ? 'male' : 'female'} 
-                    size={18} 
-                    color={gender === g ? Colors.white : Colors.gray500} 
+                  <Ionicons
+                    name={g === 'Male' ? 'male' : 'female'}
+                    size={18}
+                    color={gender === g ? Colors.white : Colors.gray500}
                   />
-                  <Text style={[styles.genderText, gender === g && styles.genderTextActive]}>{g}</Text>
+                  <Text style={[styles.genderText, gender === g && styles.genderTextActive, { color: gender === g ? Colors.white : (isDark ? Colors.gray300 : Colors.gray700) }]}>{g}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -112,7 +246,7 @@ export default function RegisterScreen() {
             </TouchableOpacity>
 
             <View style={styles.loginRow}>
-              <Text style={styles.loginLabel}>Already have an account? </Text>
+              <Text style={[styles.loginLabel, dynamicStyles.subText]}>Already have an account? </Text>
               <TouchableOpacity onPress={() => router.back()}>
                 <Text style={styles.loginLink}>Sign In</Text>
               </TouchableOpacity>
@@ -131,6 +265,9 @@ function InputField({
   onChangeText,
   keyboardType,
   secure,
+  onBlur,
+  error,
+  isDark,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   placeholder: string;
@@ -138,20 +275,37 @@ function InputField({
   onChangeText: (t: string) => void;
   keyboardType?: 'email-address' | 'phone-pad' | 'default';
   secure?: boolean;
+  onBlur?: () => void;
+  error?: string;
+  isDark: boolean;
 }) {
+  const dynamicStyles = {
+    inputGroup: {
+      backgroundColor: isDark ? Colors.gray900 : Colors.gray50,
+      borderColor: error ? Colors.error : (isDark ? Colors.darkBorder : Colors.gray200),
+    },
+    input: {
+      color: isDark ? Colors.white : Colors.gray900,
+    }
+  };
+
   return (
-    <View style={styles.inputGroup}>
-      <Ionicons name={icon} size={20} color={Colors.gray400} style={styles.inputIcon} />
-      <TextInput
-        style={styles.input}
-        placeholder={placeholder}
-        placeholderTextColor={Colors.gray400}
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType={keyboardType ?? 'default'}
-        secureTextEntry={secure}
-        autoCapitalize={secure || keyboardType === 'email-address' ? 'none' : 'words'}
-      />
+    <View style={{ marginBottom: Spacing.md }}>
+      <View style={[styles.inputGroup, dynamicStyles.inputGroup]}>
+        <Ionicons name={icon} size={20} color={Colors.gray400} style={styles.inputIcon} />
+        <TextInput
+          style={[styles.input, dynamicStyles.input]}
+          placeholder={placeholder}
+          placeholderTextColor={Colors.gray400}
+          value={value}
+          onChangeText={onChangeText}
+          keyboardType={keyboardType ?? 'default'}
+          secureTextEntry={secure}
+          autoCapitalize={secure || keyboardType === 'email-address' ? 'none' : 'sentences'}
+          onBlur={onBlur}
+        />
+      </View>
+      {error ? <Text style={styles.inputError}>{error}</Text> : null}
     </View>
   );
 }
@@ -187,7 +341,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   card: {
-    backgroundColor: Colors.white,
     borderRadius: BorderRadius.xl,
     padding: Spacing.lg,
     ...Shadows.lg,
@@ -195,11 +348,8 @@ const styles = StyleSheet.create({
   inputGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.gray50,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: Colors.gray200,
-    marginBottom: Spacing.md,
     paddingHorizontal: Spacing.md,
     height: 52,
   },
@@ -207,7 +357,6 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: FontSize.md,
-    color: Colors.gray900,
   },
   errorText: {
     color: Colors.error,
@@ -215,10 +364,15 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
     marginLeft: Spacing.xs,
   },
+  inputError: {
+    color: Colors.error,
+    fontSize: FontSize.xs,
+    marginTop: 4,
+    marginLeft: Spacing.xs,
+  },
   label: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
-    color: Colors.gray700,
     marginBottom: Spacing.xs,
     marginLeft: Spacing.xs,
   },
@@ -236,8 +390,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: Colors.gray200,
-    backgroundColor: Colors.gray50,
   },
   genderBtnActive: {
     backgroundColor: Colors.primary,
@@ -245,11 +397,9 @@ const styles = StyleSheet.create({
   },
   genderText: {
     fontSize: FontSize.md,
-    color: Colors.gray700,
     fontWeight: FontWeight.medium,
   },
   genderTextActive: {
-    color: Colors.white,
     fontWeight: FontWeight.bold,
   },
   registerBtn: {
@@ -275,11 +425,30 @@ const styles = StyleSheet.create({
   },
   loginLabel: {
     fontSize: FontSize.sm,
-    color: Colors.gray500,
   },
   loginLink: {
     fontSize: FontSize.sm,
     color: Colors.primary,
     fontWeight: FontWeight.bold,
+  },
+  suggestionsScroll: {
+    marginTop: -Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  suggestionsContainer: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    paddingVertical: 4,
+  },
+  suggestionChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  suggestionText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semibold,
   },
 });

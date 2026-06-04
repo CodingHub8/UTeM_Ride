@@ -15,10 +15,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function LoginScreen() {
   const router = useRouter();
   const { login } = useAuth();
+  const { isDark } = useTheme();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -57,6 +60,17 @@ export default function LoginScreen() {
     Animated.spring(buttonScale, { toValue: 1, useNativeDriver: true }).start();
   };
 
+  const dynamicStyles = {
+    card: { backgroundColor: isDark ? Colors.darkCard : Colors.white },
+    cardTitle: { color: isDark ? Colors.white : Colors.gray900 },
+    inputGroup: { 
+      backgroundColor: isDark ? Colors.gray900 : Colors.gray50,
+      borderColor: isDark ? Colors.darkBorder : Colors.gray200,
+    },
+    input: { color: isDark ? Colors.white : Colors.gray900 },
+    signupLabel: { color: isDark ? Colors.gray400 : Colors.gray500 },
+  };
+
   return (
     <LinearGradient colors={[Colors.primary, Colors.primaryDark]} style={styles.gradient}>
       <KeyboardAvoidingView
@@ -77,14 +91,14 @@ export default function LoginScreen() {
           </View>
 
           {/* Card */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Sign In</Text>
+          <View style={[styles.card, dynamicStyles.card]}>
+            <Text style={[styles.cardTitle, dynamicStyles.cardTitle]}>Sign In</Text>
 
             {/* Email */}
-            <View style={styles.inputGroup}>
+            <View style={[styles.inputGroup, dynamicStyles.inputGroup]}>
               <Ionicons name="mail-outline" size={20} color={Colors.gray400} style={styles.inputIcon} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, dynamicStyles.input]}
                 placeholder="Email address"
                 placeholderTextColor={Colors.gray400}
                 keyboardType="email-address"
@@ -94,11 +108,38 @@ export default function LoginScreen() {
               />
             </View>
 
+            {/* Email Suggestions */}
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              style={styles.suggestionsScroll}
+              contentContainerStyle={styles.suggestionsContainer}
+            >
+              {['@student.utem.edu.my', 'student.utem.edu.my', '@utem.edu.my', 'utem.edu.my'].map((suggestion) => (
+                <TouchableOpacity
+                  key={suggestion}
+                  style={[styles.suggestionChip, { backgroundColor: isDark ? Colors.gray800 : Colors.gray100 }]}
+                  onPress={() => {
+                    let localPart = email;
+                    if (email.includes('@')) {
+                      localPart = email.split('@')[0];
+                    }
+                    const cleanSuggestion = suggestion.startsWith('@') ? suggestion : `@${suggestion}`;
+                    setEmail(`${localPart}${cleanSuggestion}`);
+                  }}
+                >
+                  <Text style={[styles.suggestionText, { color: isDark ? Colors.primaryLight : Colors.primary }]}>
+                    {suggestion}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
             {/* Password */}
-            <View style={styles.inputGroup}>
+            <View style={[styles.inputGroup, dynamicStyles.inputGroup]}>
               <Ionicons name="lock-closed-outline" size={20} color={Colors.gray400} style={styles.inputIcon} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, dynamicStyles.input]}
                 placeholder="Password"
                 placeholderTextColor={Colors.gray400}
                 secureTextEntry={!showPassword}
@@ -144,29 +185,9 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </Animated.View>
 
-            {/* Divider */}
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or continue with</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Social Buttons */}
-            <View style={styles.socialRow}>
-              <TouchableOpacity style={styles.socialBtn}>
-                <Ionicons name="logo-google" size={22} color={Colors.gray700} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.socialBtn}>
-                <Ionicons name="logo-apple" size={22} color={Colors.gray700} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.socialBtn}>
-                <Ionicons name="call-outline" size={22} color={Colors.gray700} />
-              </TouchableOpacity>
-            </View>
-
             {/* Sign Up Link */}
             <View style={styles.signupRow}>
-              <Text style={styles.signupLabel}>{"Don't have an account? "}</Text>
+              <Text style={[styles.signupLabel, dynamicStyles.signupLabel]}>{"Don't have an account? "}</Text>
               <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
                 <Text style={styles.signupLink}>Sign Up</Text>
               </TouchableOpacity>
@@ -211,7 +232,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   card: {
-    backgroundColor: Colors.white,
     borderRadius: BorderRadius.xl,
     padding: Spacing.lg,
     ...Shadows.lg,
@@ -219,17 +239,13 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
-    color: Colors.gray900,
     marginBottom: Spacing.lg,
   },
   inputGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.gray50,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: Colors.gray200,
-    marginBottom: Spacing.md,
     paddingHorizontal: Spacing.md,
     height: 52,
   },
@@ -237,7 +253,6 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: FontSize.md,
-    color: Colors.gray900,
   },
   eyeBtn: { padding: 4 },
   forgotBtn: {
@@ -265,48 +280,36 @@ const styles = StyleSheet.create({
     fontSize: FontSize.lg,
     fontWeight: FontWeight.bold,
   },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.gray200,
-  },
-  dividerText: {
-    marginHorizontal: Spacing.sm,
-    fontSize: FontSize.sm,
-    color: Colors.gray400,
-  },
-  socialRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  socialBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.gray50,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   signupRow: {
     flexDirection: 'row',
     justifyContent: 'center',
   },
   signupLabel: {
     fontSize: FontSize.sm,
-    color: Colors.gray500,
   },
   signupLink: {
     fontSize: FontSize.sm,
     color: Colors.primary,
     fontWeight: FontWeight.bold,
+  },
+  suggestionsScroll: {
+    marginTop: -Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  suggestionsContainer: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    paddingVertical: 4,
+  },
+  suggestionChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  suggestionText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semibold,
   },
 });

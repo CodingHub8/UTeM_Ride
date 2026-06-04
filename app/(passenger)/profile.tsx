@@ -11,7 +11,7 @@ export default function PassengerProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, logout, switchRole } = useAuth();
-  const { theme, toggleTheme, isDark, colors } = useTheme();
+  const { themeMode, setTheme, isDark, colors } = useTheme();
   const [notifications, setNotifications] = useState(true);
 
   const dynamicStyles = {
@@ -66,12 +66,37 @@ export default function PassengerProfileScreen() {
       {/* Settings */}
       <Text style={styles.sectionTitle}>Settings</Text>
       <View style={[styles.card, dynamicStyles.card]}>
-        <View style={[styles.settingRow, dynamicStyles.border]}>
-          <View style={styles.settingLeft}>
-            <Ionicons name="moon-outline" size={20} color={isDark ? Colors.gray300 : Colors.gray600} />
-            <Text style={[styles.settingLabel, dynamicStyles.text]}>Dark Mode</Text>
+        <View style={[styles.settingRow, dynamicStyles.border, { flexDirection: 'column', alignItems: 'stretch', gap: Spacing.sm }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={styles.settingLeft}>
+              <Ionicons name="color-palette-outline" size={20} color={isDark ? Colors.gray300 : Colors.gray600} />
+              <Text style={[styles.settingLabel, dynamicStyles.text]}>Theme</Text>
+            </View>
           </View>
-          <Switch value={isDark} onValueChange={toggleTheme} trackColor={{ true: Colors.primary }} />
+          
+          <View style={styles.themeSelectorGroup}>
+            {(['system', 'light', 'dark'] as const).map((mode) => (
+              <TouchableOpacity
+                key={mode}
+                style={[
+                  styles.themeSelectorBtn,
+                  { backgroundColor: isDark ? Colors.gray900 : Colors.gray50 },
+                  themeMode === mode && { backgroundColor: Colors.primary }
+                ]}
+                onPress={() => setTheme(mode)}
+              >
+                <Text
+                  style={[
+                    styles.themeSelectorText,
+                    { color: isDark ? Colors.gray400 : Colors.gray600 },
+                    themeMode === mode && { color: Colors.white, fontWeight: 'bold' }
+                  ]}
+                >
+                  {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
         <View style={[styles.settingRow, dynamicStyles.border]}>
           <View style={styles.settingLeft}>
@@ -132,4 +157,20 @@ const styles = StyleSheet.create({
   switchText: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.accent },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, marginHorizontal: Spacing.md, borderRadius: BorderRadius.md, paddingVertical: 14, marginTop: Spacing.sm },
   logoutText: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.error },
+  themeSelectorGroup: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  themeSelectorBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themeSelectorText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
+  },
 });

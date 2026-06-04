@@ -10,6 +10,7 @@ import {
   doc,
   setDoc,
   getDoc,
+  updateDoc,
   serverTimestamp,
 } from 'firebase/firestore';
 import { auth, db } from '@/utils/firebase';
@@ -26,10 +27,12 @@ export interface User {
   role: UserRole;       // Active client-side mode — passenger or driver
   gender: Gender;
   is_verified: boolean;
+  is_2FA_verified: boolean;
   matricCardImage?: string;
   roadTaxImage?: string;
   vehiclePlate?: string;
   vehicleModel?: string;
+  vehicleColor?: string;
   encryptedDocs?: string;
 }
 
@@ -50,11 +53,14 @@ interface AuthContextType {
     roadTaxImage: string,
     vehiclePlate: string,
     vehicleModel: string,
+    vehicleColor: string,
     encryptedDocs: string
   ) => Promise<void>;
   logout: () => void;
   switchRole: () => void;
   setRole: (role: UserRole) => void;
+  verify2FA: () => Promise<void>;
+  verifyAdminDocs: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -89,8 +95,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 role: data.role ?? 'passenger',
                 gender: data.gender,
                 is_verified: data.is_verified ?? false,
+                is_2FA_verified: data.is_2FA_verified ?? false,
                 vehiclePlate: data.vehiclePlate,
                 vehicleModel: data.vehicleModel,
+                vehicleColor: data.vehicleColor,
                 encryptedDocs: data.encryptedDocs,
               });
               setRole(data.role ?? 'passenger');
@@ -133,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     roadTaxImage: string,
     vehiclePlate: string,
     vehicleModel: string,
+    vehicleColor: string,
     encryptedDocs: string,
   ) => {
     // 1. Create Firebase Auth account FIRST (no Firestore needed)
@@ -162,8 +171,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         gender,
         role: 'passenger',
         is_verified: false,
+        is_2FA_verified: false,
         vehiclePlate,
         vehicleModel,
+        vehicleColor,
         encryptedDocs,
         created_at: serverTimestamp(),
         updated_at: serverTimestamp(),
@@ -207,10 +218,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       role: 'passenger',
       gender,
       is_verified: false,
+      is_2FA_verified: false,
       matricCardImage,
       roadTaxImage,
       vehiclePlate,
       vehicleModel,
+      vehicleColor,
       encryptedDocs,
     });
   }, []);
@@ -236,9 +249,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [user]);
 
+  /**
+   * verify2FA — simulates clicking the verification link sent via email/SMS.
+   * Updates Firestore and local state.
+   */
+  const verify2FA = useCallback(async () => {
+    if (!user) return;
+    try {
+      const userRef = doc(db, 'users', user.id);
+      await updateDoc(userRef, {
+        is_2FA_verified: true,
+        updated_at: serverTimestamp(),
+      });
+      setUser((prev) => prev ? { ...prev, is_2FA_verified: true } : null);
+    } catch (error) {
+      console.error('Failed to verify 2FA:', error);
+      throw error;
+    }
+  }, [user]);
+
+  /**
+   * verifyAdminDocs — simulates admin document verification.
+   * Updates Firestore and local state.
+   */
+  const verifyAdminDocs = useCallback(async () => {
+    if (!user) return;
+    try {
+      const userRef = doc(db, 'users', user.id);
+      await updateDoc(userRef, {
+        is_verified: true,
+        updated_at: serverTimestamp(),
+      });
+
+      const docRef = doc(db, 'user_documents', user.id);
+      await updateDoc(docRef, {
+        is_verified: true,
+        verified_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      });
+
+      setUser((prev) => prev ? { ...prev, is_verified: true } : null);
+    } catch (error) {
+      console.error('Failed to verify admin documents:', error);
+      throw error;
+    }
+  }, [user]);
+
   const value = useMemo(
-    () => ({ user, isAuthenticated: !!user, loading, role, login, register, logout, switchRole, setRole }),
-    [user, loading, role, login, register, logout, switchRole],
+    () => ({ user, isAuthenticated: !!user, loading, role, login, register, logout, switchRole, setRole, verify2FA, verifyAdminDocs }),
+    [user, loading, role, login, register, logout, switchRole, verify2FA, verifyAdminDocs],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

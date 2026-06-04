@@ -22,6 +22,12 @@ import { performOCR } from '@/utils/ocr';
 import { encryptObject } from '@/utils/encryption';
 import { useTheme } from '@/contexts/ThemeContext';
 
+interface VehicleDoc {
+  id: string;
+  uri: string;
+  type: 'Road Tax' | 'Vehicle Ownership Certificate' | 'Other';
+}
+
 export default function DocumentUploadScreen() {
   const router = useRouter();
   const { register } = useAuth();
@@ -35,140 +41,154 @@ export default function DocumentUploadScreen() {
     password: string;
   }>();
 
-  // Image URI states
+  // Matric card state
   const [matricUri, setMatricUri] = useState<string | null>(null);
-  const [roadTaxUri, setRoadTaxUri] = useState<string | null>(null);
-
-  // OCR Loading states
   const [matricLoading, setMatricLoading] = useState(false);
+  const [studentId, setStudentId] = useState('');
+  const [extractedName, setExtractedName] = useState('');
+  const [matricLines, setMatricLines] = useState<string[]>([]);
+
+  // Vehicle documents list state
+  const [vehicleDocs, setVehicleDocs] = useState<VehicleDoc[]>([]);
   const [roadTaxLoading, setRoadTaxLoading] = useState(false);
 
   // Extracted OCR Data (Editable by user for validation)
-  const [studentId, setStudentId] = useState('');
-  const [extractedName, setExtractedName] = useState('');
   const [plateNumber, setPlateNumber] = useState('');
   const [vehicleModel, setVehicleModel] = useState('');
+  const [vehicleColor, setVehicleColor] = useState('');
   const [roadTaxExpiry, setRoadTaxExpiry] = useState('');
-  
-  // Extracted raw OCR lines
-  const [matricLines, setMatricLines] = useState<string[]>([]);
   const [roadTaxLines, setRoadTaxLines] = useState<string[]>([]);
 
-  // Function to choose image source
-  const showImageSource = (type: 'matric_card' | 'road_tax') => {
+  // Picker logic for Matric Card
+  const handleMatricPick = () => {
     Alert.alert(
-      'Select Image Source',
+      'Upload Matric/Staff Card',
       'Choose how you want to upload your document',
       [
-        {
-          text: 'Camera',
-          onPress: () => handleTakePhoto(type),
-        },
-        {
-          text: 'Gallery',
-          onPress: () => handlePickImage(type),
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+        { text: 'Camera', onPress: () => captureMatric(true) },
+        { text: 'Gallery', onPress: () => captureMatric(false) },
+        { text: 'Cancel', style: 'cancel' }
       ]
     );
   };
 
-  // Image Picker Logic
-  const handlePickImage = async (type: 'matric_card' | 'road_tax') => {
+  const captureMatric = async (useCamera: boolean) => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'We need access to your gallery to upload documents.');
+      const permission = useCamera 
+        ? await ImagePicker.requestCameraPermissionsAsync() 
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permission.status !== 'granted') {
+        Alert.alert('Permission Required', 'Access to camera/gallery is required.');
         return;
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.8,
-      });
+      const result = useCamera
+        ? await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.8 });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const uri = result.assets[0].uri;
-        if (type === 'matric_card') {
-          setMatricUri(uri);
-          processDocumentOCR(uri, 'matric_card');
-        } else {
-          setRoadTaxUri(uri);
-          processDocumentOCR(uri, 'road_tax');
+        setMatricUri(uri);
+        
+        // Run OCR on Matric
+        setMatricLoading(true);
+        try {
+          const ocrResult = await performOCR(uri, 'matric_card');
+          setMatricLines(ocrResult.lines);
+          if (ocrResult.rawData.studentId) setStudentId(ocrResult.rawData.studentId);
+          if (ocrResult.rawData.name) setExtractedName(ocrResult.rawData.name);
+        } catch (e: any) {
+          Alert.alert('OCR Extraction Failed', e?.message || 'Could not read text. Please type manually below.');
+        } finally {
+          setMatricLoading(false);
         }
       }
     } catch (error) {
-      console.error('Image selection error:', error);
+      console.error(error);
     }
   };
 
-  // Camera Logic
-  const handleTakePhoto = async (type: 'matric_card' | 'road_tax') => {
+  // Add vehicle document selection
+  const handleAddVehicleDoc = () => {
+    Alert.alert(
+      'Select Document Type',
+      'Choose the type of document you want to upload',
+      [
+        { text: 'Road Tax', onPress: () => initiateVehicleDocCapture('Road Tax') },
+        { text: 'Vehicle Ownership Certificate (VOC)', onPress: () => initiateVehicleDocCapture('Vehicle Ownership Certificate') },
+        { text: 'Other Document', onPress: () => initiateVehicleDocCapture('Other') },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const initiateVehicleDocCapture = (type: VehicleDoc['type']) => {
+    Alert.alert(
+      `Upload ${type}`,
+      'Choose document source',
+      [
+        { text: 'Camera', onPress: () => captureVehicleDoc(type, true) },
+        { text: 'Gallery', onPress: () => captureVehicleDoc(type, false) },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const captureVehicleDoc = async (type: VehicleDoc['type'], useCamera: boolean) => {
     try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'We need access to your camera to take photos.');
+      const permission = useCamera 
+        ? await ImagePicker.requestCameraPermissionsAsync() 
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permission.status !== 'granted') {
+        Alert.alert('Permission Required', 'Access to camera/gallery is required.');
         return;
       }
 
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        quality: 0.8,
-      });
+      const result = useCamera
+        ? await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.8 });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const uri = result.assets[0].uri;
-        if (type === 'matric_card') {
-          setMatricUri(uri);
-          processDocumentOCR(uri, 'matric_card');
-        } else {
-          setRoadTaxUri(uri);
-          processDocumentOCR(uri, 'road_tax');
+        const newDoc: VehicleDoc = {
+          id: String(Date.now()),
+          uri,
+          type
+        };
+        setVehicleDocs(prev => [...prev, newDoc]);
+
+        // Run OCR on the newly added vehicle document
+        setRoadTaxLoading(true);
+        try {
+          const ocrResult = await performOCR(uri, 'road_tax');
+          setRoadTaxLines(prev => [...prev, ...ocrResult.lines]);
+          
+          if (ocrResult.rawData.plateNumber) setPlateNumber(ocrResult.rawData.plateNumber);
+          if (ocrResult.rawData.vehicleModel) setVehicleModel(ocrResult.rawData.vehicleModel);
+          if (ocrResult.rawData.expiryDate) setRoadTaxExpiry(ocrResult.rawData.expiryDate);
+
+          // Try to extract color from OCR text
+          const colorsList = ['WHITE', 'BLACK', 'SILVER', 'GREY', 'GRAY', 'RED', 'BLUE', 'GREEN', 'YELLOW', 'BROWN', 'ORANGE', 'GOLD'];
+          const joinedLines = ocrResult.lines.join(' ').toUpperCase();
+          const foundColor = colorsList.find(c => joinedLines.includes(c));
+          if (foundColor) {
+            setVehicleColor(foundColor.charAt(0) + foundColor.slice(1).toLowerCase());
+          }
+        } catch (e: any) {
+          console.warn('OCR Failure on vehicle doc:', e?.message);
+        } finally {
+          setRoadTaxLoading(false);
         }
       }
     } catch (error) {
-      console.error('Camera capture error:', error);
+      console.error(error);
     }
   };
 
-  // OCR Processing
-  const processDocumentOCR = async (uri: string, type: 'matric_card' | 'road_tax') => {
-    if (type === 'matric_card') {
-      setMatricLoading(true);
-    } else {
-      setRoadTaxLoading(true);
-    }
-
-    try {
-      const ocrResult = await performOCR(uri, type);
-      
-      if (type === 'matric_card') {
-        setMatricLines(ocrResult.lines);
-        if (ocrResult.rawData.studentId) setStudentId(ocrResult.rawData.studentId);
-        if (ocrResult.rawData.name) setExtractedName(ocrResult.rawData.name);
-      } else {
-        setRoadTaxLines(ocrResult.lines);
-        if (ocrResult.rawData.plateNumber) setPlateNumber(ocrResult.rawData.plateNumber);
-        if (ocrResult.rawData.vehicleModel) setVehicleModel(ocrResult.rawData.vehicleModel);
-        if (ocrResult.rawData.expiryDate) setRoadTaxExpiry(ocrResult.rawData.expiryDate);
-      }
-    } catch (e: any) {
-      // Show the actual error message (e.g., API key not configured, API error)
-      Alert.alert(
-        'OCR Extraction Failed',
-        e?.message || 'Could not extract text from document. Please enter your details manually below.'
-      );
-    } finally {
-      if (type === 'matric_card') {
-        setMatricLoading(false);
-      } else {
-        setRoadTaxLoading(false);
-      }
-    }
+  const removeVehicleDoc = (id: string) => {
+    setVehicleDocs(prev => prev.filter(d => d.id !== id));
   };
 
   const handleCompleteRegister = async () => {
@@ -182,22 +202,24 @@ export default function DocumentUploadScreen() {
     }
 
     // Encrypt sensitive information client-side before transmission
-    // Contains documents, license, and raw OCR output lines
     const sensitivePayload = {
       studentId,
       fullName: extractedName,
       matricImage: matricUri,
-      roadTaxImage: roadTaxUri || 'N/A',
       vehiclePlate: plateNumber || 'N/A',
       vehicleModel: vehicleModel || 'N/A',
+      vehicleColor: vehicleColor || 'N/A',
       matricOcrLines: matricLines,
       roadTaxOcrLines: roadTaxLines,
+      allVehicleDocuments: vehicleDocs.map(d => ({ uri: d.uri, type: d.type })),
     };
 
     // Client-side secure encryption of sensitive data
     const encryptedData = encryptObject(sensitivePayload, params.password);
 
     try {
+      const mainRoadTaxImage = vehicleDocs.find(d => d.type === 'Road Tax')?.uri || vehicleDocs[0]?.uri || '';
+      
       await register(
         extractedName,
         params.email,
@@ -206,19 +228,19 @@ export default function DocumentUploadScreen() {
         params.password,
         studentId, // Student/Staff ID becomes PRIMARY KEY
         matricUri,
-        roadTaxUri || '',
+        mainRoadTaxImage,
         plateNumber,
         vehicleModel,
+        vehicleColor,
         encryptedData
       );
       
-      Alert.alert('Registration Successful', `Welcome, your Student ID (${studentId}) is registered.`, [
+      Alert.alert('Registration Successful', `Welcome! Account ${studentId} registered. Verify 2FA via the banner on Home to book rides.`, [
         { text: 'OK', onPress: () => router.replace('/(auth)/role-select') }
       ]);
     } catch (e: any) {
       console.error('[Register Error]', e);
-      const errorMsg = e?.message || 'Something went wrong. Please try again.';
-      Alert.alert('Registration Failed', errorMsg);
+      Alert.alert('Registration Failed', e?.message || 'Something went wrong. Please try again.');
     }
   };
 
@@ -261,7 +283,7 @@ export default function DocumentUploadScreen() {
 
             <TouchableOpacity
               style={[styles.uploadBox, matricUri && styles.uploadBoxActive, { borderColor: isDark ? Colors.darkBorder : Colors.gray200 }]}
-              onPress={() => showImageSource('matric_card')}
+              onPress={handleMatricPick}
             >
               {matricLoading ? (
                 <View style={styles.loadingBox}>
@@ -314,41 +336,44 @@ export default function DocumentUploadScreen() {
 
             <View style={styles.sectionDivider} />
 
-            <Text style={[styles.sectionTitle, dynamicStyles.text]}>2. Road Tax (Optional for Drivers)</Text>
+            <Text style={[styles.sectionTitle, dynamicStyles.text]}>2. Vehicle Documents (Optional for Drivers)</Text>
             <Text style={[styles.sectionSubtitle, dynamicStyles.subText]}>
-              Upload vehicle road tax slip to activate driver capabilities
+              Upload documents (Road Tax, VOC, etc.) to activate driver capabilities
             </Text>
 
+            {/* Documents List */}
+            {vehicleDocs.map((doc) => (
+              <View key={doc.id} style={[styles.docListItem, { backgroundColor: isDark ? Colors.gray900 : Colors.gray50, borderColor: isDark ? Colors.darkBorder : Colors.gray200 }]}>
+                <Image source={{ uri: doc.uri }} style={styles.docListThumbnail} />
+                <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                  <Text style={[styles.docListType, dynamicStyles.text]}>{doc.type}</Text>
+                  <Text style={[styles.docListSub, dynamicStyles.subText]}>Document uploaded</Text>
+                </View>
+                <TouchableOpacity onPress={() => removeVehicleDoc(doc.id)} style={styles.docDeleteBtn}>
+                  <Ionicons name="trash-outline" size={20} color={Colors.error} />
+                </TouchableOpacity>
+              </View>
+            ))}
+
             <TouchableOpacity
-              style={[styles.uploadBox, roadTaxUri && styles.uploadBoxActive, { borderColor: isDark ? Colors.darkBorder : Colors.gray200 }]}
-              onPress={() => showImageSource('road_tax')}
+              style={[styles.addDocBtn, { borderColor: isDark ? Colors.darkBorder : Colors.gray200 }]}
+              onPress={handleAddVehicleDoc}
             >
-              {roadTaxLoading ? (
-                <View style={styles.loadingBox}>
-                  <ActivityIndicator size="large" color={Colors.primary} />
-                  <Text style={[styles.uploadText, dynamicStyles.text, { marginTop: 10 }]}>Extracting Text via OCR...</Text>
-                </View>
-              ) : roadTaxUri ? (
-                <View style={styles.previewContainer}>
-                  <Image source={{ uri: roadTaxUri }} style={styles.previewImage} />
-                  <View style={styles.editOverlay}>
-                    <Ionicons name="camera" size={20} color={Colors.white} />
-                    <Text style={styles.editText}>Tap to Change</Text>
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.uploadPlaceholder}>
-                  <Ionicons name="document-text-outline" size={40} color={Colors.accent} />
-                  <Text style={[styles.uploadText, dynamicStyles.text]}>Scan or Upload Road Tax</Text>
-                  <Text style={[styles.uploadSub, dynamicStyles.subText]}>Required to earn as driver</Text>
-                </View>
-              )}
+              <Ionicons name="add-circle-outline" size={24} color={Colors.primary} />
+              <Text style={[styles.addDocBtnText, { color: Colors.primary }]}>Add Vehicle Document</Text>
             </TouchableOpacity>
 
+            {roadTaxLoading && (
+              <View style={[styles.loadingBox, { marginVertical: Spacing.md }]}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+                <Text style={[styles.uploadText, dynamicStyles.text, { fontSize: FontSize.sm, marginTop: 6 }]}>Reading documents via OCR...</Text>
+              </View>
+            )}
+
             {/* Extracted Road Tax Fields */}
-            {roadTaxUri && !roadTaxLoading && (
+            {vehicleDocs.length > 0 && !roadTaxLoading && (
               <View style={styles.fieldsContainer}>
-                <Text style={styles.fieldHeader}>Verified Road Tax Details</Text>
+                <Text style={styles.fieldHeader}>Extracted Vehicle Details</Text>
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Vehicle Plate Number</Text>
                   <TextInput
@@ -367,6 +392,16 @@ export default function DocumentUploadScreen() {
                     value={vehicleModel}
                     onChangeText={setVehicleModel}
                     placeholder="E.g., Perodua Myvi"
+                    placeholderTextColor={Colors.gray400}
+                  />
+                </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Vehicle Colour</Text>
+                  <TextInput
+                    style={[styles.input, dynamicStyles.input]}
+                    value={vehicleColor}
+                    onChangeText={setVehicleColor}
+                    placeholder="E.g., White"
                     placeholderTextColor={Colors.gray400}
                   />
                 </View>
@@ -445,7 +480,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   card: {
-    backgroundColor: Colors.white,
     borderRadius: BorderRadius.xl,
     padding: Spacing.lg,
     ...Shadows.lg,
@@ -549,6 +583,46 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: Colors.gray200,
     marginVertical: Spacing.lg,
+  },
+  docListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+  },
+  docListThumbnail: {
+    width: 50,
+    height: 50,
+    borderRadius: BorderRadius.sm,
+    resizeMode: 'cover',
+  },
+  docListType: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+  },
+  docListSub: {
+    fontSize: FontSize.xs,
+    marginTop: 2,
+  },
+  docDeleteBtn: {
+    padding: Spacing.sm,
+  },
+  addDocBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.lg,
+  },
+  addDocBtnText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
   },
   securityAlert: {
     flexDirection: 'row',

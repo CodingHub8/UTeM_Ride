@@ -1,6 +1,6 @@
 import { Colors } from '@/constants/theme';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { LayoutAnimation, Platform, UIManager } from 'react-native';
+import { LayoutAnimation, Platform, UIManager, useColorScheme } from 'react-native';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
 
 // Enable LayoutAnimation on Android
@@ -8,10 +8,11 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-type ThemeMode = 'light' | 'dark';
+export type ThemeMode = 'system' | 'light' | 'dark';
 
 interface ThemeContextType {
-  theme: ThemeMode;
+  themeMode: ThemeMode;
+  theme: 'light' | 'dark';
   isDark: boolean;
   toggleTheme: () => void;
   setTheme: (mode: ThemeMode) => void;
@@ -22,8 +23,16 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeMode>('light');
+  const systemColorScheme = useColorScheme();
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
   const themeProgress = useSharedValue(0);
+
+  // Resolved active theme
+  const theme = themeMode === 'system'
+    ? (systemColorScheme === 'dark' ? 'dark' : 'light')
+    : themeMode;
+
+  const isDark = theme === 'dark';
 
   useEffect(() => {
     themeProgress.value = withTiming(theme === 'dark' ? 1 : 0, { duration: 400 });
@@ -31,12 +40,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const toggleTheme = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setThemeState((prev) => (prev === 'light' ? 'dark' : 'light'));
+    setThemeModeState((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
   const setTheme = (mode: ThemeMode) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setThemeState(mode);
+    setThemeModeState(mode);
   };
 
   // Theme-aware colors
@@ -52,8 +61,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeContext.Provider value={{
+      themeMode,
       theme,
-      isDark: theme === 'dark',
+      isDark,
       toggleTheme,
       setTheme,
       colors: themeColors as any,

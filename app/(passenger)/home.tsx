@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Platform, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Platform, Dimensions, Alert } from 'react-native';
 import { useRouter, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,7 +60,7 @@ const DARK_MAP_STYLE = [
 export default function PassengerHomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, verify2FA } = useAuth();
   const { isDark, theme, themeProgress } = useTheme();
   const mapRef = useRef<MapView>(null);
   
@@ -329,6 +329,39 @@ export default function PassengerHomeScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Animated.View style={[styles.container, animatedContainerStyle]}>
+        {user && !user.is_2FA_verified && (
+          <TouchableOpacity 
+            style={[styles.verificationBanner, { backgroundColor: Colors.warning, top: insets.top + 10 }]}
+            onPress={async () => {
+              Alert.alert(
+                'Simulate 2FA Verification',
+                'Do you want to simulate clicking the email/SMS link to complete 2FA verification?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Verify 2FA Now',
+                    onPress: async () => {
+                      try {
+                        await verify2FA();
+                        Alert.alert('2FA Verified', 'Account has been successfully verified.');
+                      } catch (err) {
+                        Alert.alert('Error', 'Verification failed.');
+                      }
+                    }
+                  }
+                ]
+              );
+            }}
+          >
+            <View style={styles.verificationBannerLeft}>
+              <Ionicons name="warning-outline" size={18} color={Colors.white} />
+              <Text style={styles.verificationBannerText}>
+                2FA Pending: Tap to simulate link verification.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={Colors.white} />
+          </TouchableOpacity>
+        )}
         {/* Google Map */}
         <View style={styles.mapContainer}>
           <MapView
@@ -631,6 +664,30 @@ const styles = StyleSheet.create({
   placeAddr: {
     fontSize: FontSize.xs,
     marginTop: 2,
+  },
+  verificationBanner: {
+    position: 'absolute',
+    left: Spacing.md,
+    right: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    zIndex: 100,
+    ...Shadows.md,
+  },
+  verificationBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    flex: 1,
+  },
+  verificationBannerText: {
+    color: Colors.white,
+    fontWeight: FontWeight.bold,
+    fontSize: FontSize.xs,
   },
 });
 

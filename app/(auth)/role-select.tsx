@@ -5,10 +5,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function RoleSelectScreen() {
   const router = useRouter();
   const { setRole } = useAuth();
+  const { isDark } = useTheme();
 
   const handleSelect = (role: 'passenger' | 'driver') => {
     setRole(role);
@@ -30,6 +32,7 @@ export default function RoleSelectScreen() {
           description="Find affordable rides around campus and beyond"
           color={Colors.primaryLight}
           onPress={() => handleSelect('passenger')}
+          isDark={isDark}
         />
         <RoleCard
           icon="car-sport"
@@ -38,6 +41,7 @@ export default function RoleSelectScreen() {
           description="Earn money by giving rides to fellow students"
           color={Colors.accent}
           onPress={() => handleSelect('driver')}
+          isDark={isDark}
         />
       </View>
     </LinearGradient>
@@ -50,6 +54,7 @@ function RoleCard({
   description,
   color,
   onPress,
+  isDark,
 }: {
   icon: string;
   emoji: string;
@@ -57,13 +62,20 @@ function RoleCard({
   description: string;
   color: string;
   onPress: () => void;
+  isDark: boolean;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
+
+  const dynamicStyles = {
+    card: { backgroundColor: isDark ? Colors.darkCard : Colors.white },
+    title: { color: isDark ? Colors.white : Colors.gray900 },
+    desc: { color: isDark ? Colors.gray400 : Colors.gray500 },
+  };
 
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, dynamicStyles.card]}
         onPress={onPress}
         onPressIn={() => Animated.spring(scale, { toValue: 0.96, useNativeDriver: true }).start()}
         onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start()}
@@ -73,8 +85,8 @@ function RoleCard({
           <Text style={styles.cardEmoji}>{emoji}</Text>
         </View>
         <View style={styles.cardContent}>
-          <Text style={styles.cardTitle}>{title}</Text>
-          <Text style={styles.cardDesc}>{description}</Text>
+          <Text style={[styles.cardTitle, dynamicStyles.title]}>{title}</Text>
+          <Text style={[styles.cardDesc, dynamicStyles.desc]}>{description}</Text>
         </View>
         <Ionicons name="chevron-forward" size={24} color={color} />
       </TouchableOpacity>
@@ -108,7 +120,6 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.white,
     borderRadius: BorderRadius.xl,
     padding: Spacing.lg,
     ...Shadows.lg,
@@ -126,11 +137,9 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: FontSize.lg,
     fontWeight: FontWeight.bold,
-    color: Colors.gray900,
   },
   cardDesc: {
     fontSize: FontSize.sm,
-    color: Colors.gray500,
     marginTop: 2,
   },
 });

@@ -1,17 +1,20 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, FontSize } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function DriverLayout() {
+  const { isDark } = useTheme();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.accent,
-        tabBarInactiveTintColor: Colors.gray400,
+        tabBarActiveTintColor: isDark ? Colors.primaryLight : Colors.primary,
+        tabBarInactiveTintColor: isDark ? Colors.gray600 : Colors.gray400,
         tabBarStyle: {
-          backgroundColor: Colors.gray900,
-          borderTopColor: Colors.darkBorder,
+          backgroundColor: isDark ? Colors.darkCard : Colors.white,
+          borderTopColor: isDark ? Colors.darkBorder : Colors.gray200,
           borderTopWidth: 1,
           paddingBottom: 8,
           paddingTop: 8,
@@ -28,6 +31,13 @@ export default function DriverLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color, size }) => <Ionicons name="car-sport" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="create-pool"
+        options={{
+          title: 'Create Pool',
+          tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} />,
         }}
       />
       <Tabs.Screen

@@ -1,15 +1,17 @@
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, Switch, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, Switch, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useState } from 'react';
 
 export default function CreatePoolScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDark } = useTheme();
+  const { user } = useAuth();
   
   const [destination, setDestination] = useState('');
   const [date, setDate] = useState('Select date');
@@ -26,7 +28,8 @@ export default function CreatePoolScreen() {
       backgroundColor: isDark ? Colors.gray900 : Colors.gray50,
       color: isDark ? Colors.white : Colors.gray900,
       borderColor: isDark ? Colors.darkBorder : Colors.gray200
-    }
+    },
+    divider: { backgroundColor: isDark ? Colors.darkBorder : Colors.gray100 }
   };
 
   return (
@@ -78,7 +81,7 @@ export default function CreatePoolScreen() {
         <Text style={styles.sectionTitle}>Preferences</Text>
         <View style={[styles.card, dynamicStyles.card]}>
           <View style={styles.rowItem}>
-            <View>
+            <View style={{ flex: 1, paddingRight: Spacing.sm }}>
               <Text style={[styles.rowLabel, dynamicStyles.text]}>Available Seats</Text>
               <Text style={[styles.rowSub, dynamicStyles.subText]}>How many passengers can join?</Text>
             </View>
@@ -93,10 +96,10 @@ export default function CreatePoolScreen() {
             </View>
           </View>
           
-          <View style={styles.divider} />
+          <View style={[styles.divider, dynamicStyles.divider]} />
 
           <View style={styles.rowItem}>
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, paddingRight: Spacing.sm }}>
               <Text style={[styles.rowLabel, dynamicStyles.text]}>Gender Matching</Text>
               <Text style={[styles.rowSub, dynamicStyles.subText]}>Only allow passengers of your gender</Text>
             </View>
@@ -111,7 +114,15 @@ export default function CreatePoolScreen() {
         <TouchableOpacity 
           style={styles.submitBtn}
           onPress={() => {
-            alert('Pool slot created successfully!');
+            if (user && !user.is_2FA_verified) {
+              Alert.alert(
+                '2FA Required',
+                'Please complete your 2FA verification first to publish a pool slot.',
+                [{ text: 'OK' }]
+              );
+              return;
+            }
+            Alert.alert('Success', 'Pool slot created successfully!');
             router.back();
           }}
         >
@@ -141,7 +152,7 @@ const styles = StyleSheet.create({
   counter: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   counterBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.primary + '15', justifyContent: 'center', alignItems: 'center' },
   counterVal: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, minWidth: 20, textAlign: 'center' },
-  divider: { height: 1, backgroundColor: Colors.gray100, marginVertical: Spacing.md },
+  divider: { height: 1, marginVertical: Spacing.md },
   submitBtn: { backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingVertical: 16, alignItems: 'center', marginTop: Spacing.xl, ...Shadows.md },
   submitText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: FontWeight.bold },
 });

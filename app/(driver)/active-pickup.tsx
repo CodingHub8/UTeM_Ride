@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { PROVIDER_GOOGLE, Marker, Polyline } from 'react-native-maps';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 // Mock coordinates for navigation to pickup
 const DRIVER_COORD = { latitude: 2.3165, longitude: 102.3245 };
@@ -16,15 +17,51 @@ const ROUTE_POINTS = [
   PICKUP_COORD,
 ];
 
+const DARK_MAP_STYLE = [
+  { "elementType": "geometry", "stylers": [{ "color": "#242f3e" }] },
+  { "elementType": "labels.text.fill", "stylers": [{ "color": "#746855" }] },
+  { "elementType": "labels.text.stroke", "stylers": [{ "color": "#242f3e" }] },
+  { "featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [{ "color": "#d59563" }] },
+  { "featureType": "poi", "elementType": "labels.text.fill", "stylers": [{ "color": "#d59563" }] },
+  { "featureType": "poi.park", "elementType": "geometry", "stylers": [{ "color": "#263c3f" }] },
+  { "featureType": "poi.park", "elementType": "labels.text.fill", "stylers": [{ "color": "#6b9a76" }] },
+  { "featureType": "road", "elementType": "geometry", "stylers": [{ "color": "#38414e" }] },
+  { "featureType": "road", "elementType": "geometry.stroke", "stylers": [{ "color": "#212a37" }] },
+  { "featureType": "road", "elementType": "labels.text.fill", "stylers": [{ "color": "#9ca5b9" }] },
+  { "featureType": "road.highway", "elementType": "geometry", "stylers": [{ "color": "#746855" }] },
+  { "featureType": "road.highway", "elementType": "geometry.stroke", "stylers": [{ "color": "#1f2835" }] },
+  { "featureType": "road.highway", "elementType": "labels.text.fill", "stylers": [{ "color": "#f3d19c" }] },
+  { "featureType": "transit", "elementType": "geometry", "stylers": [{ "color": "#2f3948" }] },
+  { "featureType": "transit.station", "elementType": "labels.text.fill", "stylers": [{ "color": "#d59563" }] },
+  { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#17263c" }] },
+  { "featureType": "water", "elementType": "labels.text.fill", "stylers": [{ "color": "#515c6d" }] },
+  { "featureType": "water", "elementType": "labels.text.stroke", "stylers": [{ "color": "#17263c" }] }
+];
+
 export default function ActivePickupScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { isDark, theme } = useTheme();
+
+  const dynamicStyles = {
+    container: { backgroundColor: isDark ? Colors.darkBg : Colors.gray50 },
+    panel: { backgroundColor: isDark ? Colors.darkCard : Colors.white },
+    passengerName: { color: isDark ? Colors.white : Colors.gray900 },
+    pickupAddr: { color: isDark ? Colors.gray400 : Colors.gray500 },
+    divider: { backgroundColor: isDark ? Colors.darkBorder : Colors.gray200 },
+    cancelBtn: { 
+      backgroundColor: isDark ? Colors.darkBg : Colors.gray100, 
+      borderColor: isDark ? Colors.darkBorder : Colors.gray300 
+    },
+    cancelText: { color: isDark ? Colors.gray400 : Colors.gray600 },
+  };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, dynamicStyles.container, { paddingTop: insets.top }]}>
       {/* Map area */}
       <View style={styles.mapArea}>
         <MapView
+          key={isDark ? 'dark-map' : 'light-map'}
           style={styles.map}
           provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           initialRegion={{
@@ -33,6 +70,8 @@ export default function ActivePickupScreen() {
             latitudeDelta: 0.015,
             longitudeDelta: 0.015,
           }}
+          customMapStyle={isDark ? DARK_MAP_STYLE : []}
+          userInterfaceStyle={theme}
         >
           <Polyline
             coordinates={ROUTE_POINTS}
@@ -63,7 +102,7 @@ export default function ActivePickupScreen() {
       </View>
 
       {/* Bottom panel */}
-      <View style={styles.panel}>
+      <View style={[styles.panel, dynamicStyles.panel]}>
         <Text style={styles.panelTitle}>Heading to pickup</Text>
 
         {/* Passenger info */}
@@ -72,8 +111,8 @@ export default function ActivePickupScreen() {
             <Ionicons name="person" size={24} color={Colors.white} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.passengerName}>Passenger</Text>
-            <Text style={styles.pickupAddr}>--</Text>
+            <Text style={[styles.passengerName, dynamicStyles.passengerName]}>Passenger</Text>
+            <Text style={[styles.pickupAddr, dynamicStyles.pickupAddr]}>--</Text>
           </View>
           <TouchableOpacity style={styles.contactBtn}>
             <Ionicons name="call" size={20} color={Colors.primary} />
@@ -83,12 +122,12 @@ export default function ActivePickupScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.divider} />
+        <View style={[styles.divider, dynamicStyles.divider]} />
 
         {/* Actions */}
         <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
-            <Text style={styles.cancelText}>Cancel</Text>
+          <TouchableOpacity style={[styles.cancelBtn, dynamicStyles.cancelBtn]} onPress={() => router.back()}>
+            <Text style={[styles.cancelText, dynamicStyles.cancelText]}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.arrivedBtn}
@@ -104,25 +143,25 @@ export default function ActivePickupScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.darkBg },
-  mapArea: { flex: 1, position: 'relative', backgroundColor: Colors.gray800 },
+  container: { flex: 1 },
+  mapArea: { flex: 1, position: 'relative' },
   map: { ...StyleSheet.absoluteFillObject },
   markerCircle: { width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: Colors.white, ...Shadows.sm },
   markerInner: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.white },
   driverMarker: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: Colors.white, ...Shadows.md },
   etaBadge: { position: 'absolute', top: Spacing.md, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primary, borderRadius: BorderRadius.full, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: 6 },
   etaText: { color: Colors.white, fontWeight: FontWeight.bold, fontSize: FontSize.sm },
-  panel: { backgroundColor: Colors.darkCard, borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, padding: Spacing.lg },
-  panelTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.gray400, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: Spacing.md },
+  panel: { borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, padding: Spacing.lg },
+  panelTitle: { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, color: Colors.gray400, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: Spacing.md },
   passengerRow: { flexDirection: 'row', alignItems: 'center' },
   avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center', marginRight: Spacing.md },
-  passengerName: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.white },
-  pickupAddr: { fontSize: FontSize.sm, color: Colors.gray400, marginTop: 2 },
+  passengerName: { fontSize: FontSize.lg, fontWeight: FontWeight.bold },
+  pickupAddr: { fontSize: FontSize.sm, marginTop: 2 },
   contactBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.primary + '20', justifyContent: 'center', alignItems: 'center', marginLeft: Spacing.sm },
-  divider: { height: 1, backgroundColor: Colors.darkBorder, marginVertical: Spacing.lg },
+  divider: { height: 1, marginVertical: Spacing.lg },
   actionRow: { flexDirection: 'row', gap: Spacing.md },
-  cancelBtn: { flex: 1, borderRadius: BorderRadius.md, paddingVertical: 14, alignItems: 'center', backgroundColor: Colors.darkBg, borderWidth: 1, borderColor: Colors.darkBorder },
-  cancelText: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.gray400 },
+  cancelBtn: { flex: 1, borderRadius: BorderRadius.md, paddingVertical: 14, alignItems: 'center', borderWidth: 1 },
+  cancelText: { fontSize: FontSize.md, fontWeight: FontWeight.bold },
   arrivedBtn: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.success, borderRadius: BorderRadius.md, paddingVertical: 14 },
   arrivedText: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.white },
 });
