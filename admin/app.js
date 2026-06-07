@@ -1,7 +1,7 @@
 // UTeM Ride — Admin Portal Application Logic
 // Connected to Firebase Firestore and Authentication in Real-time
 
-// 1. Initialize Firebase Compat using project credentials from .env
+// 1. Initialize Firebase Compat using project credentials from .env via auto-generated env-config.js
 const firebaseConfig = {
   apiKey:            process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
   authDomain:        process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -10,6 +10,7 @@ const firebaseConfig = {
   messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId:             process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
+
 
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
