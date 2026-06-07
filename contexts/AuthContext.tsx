@@ -13,7 +13,9 @@ import {
   updateDoc,
   serverTimestamp,
 } from 'firebase/firestore';
-import { auth, db } from '@/utils/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, db, storage } from '@/utils/firebase';
+
 
 export type UserRole = 'passenger' | 'driver';
 export type Gender = 'Male' | 'Female' | 'Other';
@@ -64,6 +66,33 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+async function uploadImageAsync(uri: string, path: string): Promise<string> {
+  if (!uri) return '';
+  if (!uri.startsWith('file://') && !uri.startsWith('content://') && !uri.startsWith('ph://') && !uri.startsWith('assets-library://')) {
+    return uri;
+  }
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = function () {
+      resolve(xhr.response);
+    };
+    xhr.onerror = function (e) {
+      console.error('[uploadImageAsync] Failed to convert URI to blob:', e);
+      reject(new TypeError('Network request failed'));
+    };
+    xhr.responseType = 'blob';
+    xhr.open('GET', uri, true);
+    xhr.send(null);
+  });
+  try {
+    const fileRef = ref(storage, path);
+    await uploadBytes(fileRef, blob);
+    return await getDownloadURL(fileRef);
+  } finally {
+    (blob as any).close();
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -159,9 +188,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     const firebaseUid = credential.user.uid;
 
-    // 2. Now authenticated — write user profile to Firestore /users/{studentId}
-    //    Use setDoc with merge: false so it fails if the doc already exists
-    //    (prevents duplicate student ID registration)
+    // 2. Upload verification images to Firebase Storage first (gets remote URLs)
+    let matricCardUrl = '';
+    let roadTaxUrl = '';
+    try {
+      if (matricCardImage) {
+        matricCardUrl = await uploadImageAsync(matricCardImage, `documents/${studentId}/matric_card.jpg`);
+      }
+      if (roadTaxImage) {
+        roadTaxUrl = await uploadImageAsync(roadTaxImage, `documents/${studentId}/road_tax.jpg`);
+      }
+    } catch (uploadError: any) {
+      // Clean up the Auth account if storage upload fails
+      await credential.user.delete().catch(() => {});
+      throw new Error('Failed to upload verification documents to Firebase Storage: ' + uploadError.message);
+    }
+
+    // 3. Now authenticated — write user profile to Firestore /users/{studentId}
     try {
       await setDoc(doc(db, 'users', studentId), {
         firebaseUid,
@@ -193,14 +236,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
     }
 
-    // 3. Write UID index /uid_index/{firebaseUid} → studentId
+    // 4. Write UID index /uid_index/{firebaseUid} → studentId
     await setDoc(doc(db, 'uid_index', firebaseUid), { studentId });
 
-    // 4. Write user document record /user_documents/{studentId}
+    // 5. Write user document record /user_documents/{studentId}
     await setDoc(doc(db, 'user_documents', studentId), {
       user_id: studentId,
-      matric_card_url: matricCardImage,
-      road_tax_url: roadTaxImage,
+      matric_card_url: matricCardUrl,
+      road_tax_url: roadTaxUrl,
       ocr_extracted_lines: [],
       encrypted_sensitive_data: encryptedDocs,
       is_verified: false,
@@ -208,7 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       created_at: serverTimestamp(),
     });
 
-    // 5. Update local state
+    // 6. Update local state
     setUser({
       id: studentId,
       firebaseUid,
@@ -219,8 +262,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       gender,
       is_verified: false,
       is_2FA_verified: false,
-      matricCardImage,
-      roadTaxImage,
+      matricCardImage: matricCardUrl,
+      roadTaxImage: roadTaxUrl,
       vehiclePlate,
       vehicleModel,
       vehicleColor,
