@@ -1,6 +1,11 @@
 // UTeM Ride — Admin Portal Application Logic
 // Connected to Firebase Firestore and Authentication in Real-time
 
+// Provide a safe fallback global process object if env-config.js failed to load or was blocked by browser file:// restrictions
+if (typeof process === 'undefined') {
+  window.process = { env: {} };
+}
+
 // 1. Initialize Firebase Compat using project credentials from .env via auto-generated env-config.js
 const firebaseConfig = {
   apiKey:            process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -10,6 +15,7 @@ const firebaseConfig = {
   messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId:             process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
+
 
 
 // Initialize Firebase
