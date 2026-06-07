@@ -41,7 +41,7 @@ export default function RideRequestScreen() {
 
   // Payment states
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'fpx' | 'duitnow_qr' | 'card'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'fpx' | 'card'>('cash');
   const [paymentLabel, setPaymentLabel] = useState('Cash');
 
   // FPX states
@@ -56,10 +56,10 @@ export default function RideRequestScreen() {
   // Encrypted transaction metadata
   const [encryptedPaymentDetails, setEncryptedPaymentDetails] = useState('');
 
-  // Modal subviews: 'options', 'fpx', 'duitnow_qr', 'card'
-  const [paymentStep, setPaymentStep] = useState<'options' | 'fpx' | 'duitnow_qr' | 'card'>('options');
+  // Modal subviews: 'options', 'fpx', 'card'
+  const [paymentStep, setPaymentStep] = useState<'options' | 'fpx' | 'card'>('options');
 
-  const selectMethod = (method: 'cash' | 'fpx' | 'duitnow_qr' | 'card') => {
+  const selectMethod = (method: 'cash' | 'fpx' | 'card') => {
     if (method === 'cash') {
       setPaymentMethod('cash');
       setPaymentLabel('Cash');
@@ -77,16 +77,6 @@ export default function RideRequestScreen() {
 
     // Encrypt the payment token/bank metadata client-side
     const encrypted = encryptData(JSON.stringify({ bank, timestamp: Date.now() }));
-    setEncryptedPaymentDetails(encrypted);
-
-    setShowPaymentModal(false);
-  };
-
-  const confirmDuitNowQR = () => {
-    setPaymentMethod('duitnow_qr');
-    setPaymentLabel('DuitNow QR');
-
-    const encrypted = encryptData(JSON.stringify({ type: 'duitnow_qr', scanTime: Date.now() }));
     setEncryptedPaymentDetails(encrypted);
 
     setShowPaymentModal(false);
@@ -328,7 +318,6 @@ export default function RideRequestScreen() {
               <Text style={[styles.modalTitle, dynamicStyles.text]}>
                 {paymentStep === 'options' && 'Select Payment Option'}
                 {paymentStep === 'fpx' && 'Select Your Bank'}
-                {paymentStep === 'duitnow_qr' && 'DuitNow QR Payment'}
                 {paymentStep === 'card' && 'Enter Card Details'}
               </Text>
               <TouchableOpacity onPress={() => {
@@ -358,12 +347,6 @@ export default function RideRequestScreen() {
                   {paymentMethod === 'fpx' && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />}
                 </TouchableOpacity>
 
-                <TouchableOpacity style={[styles.methodItem, paymentMethod === 'duitnow_qr' && { borderColor: Colors.primary }]} onPress={() => selectMethod('duitnow_qr')}>
-                  <Ionicons name="qr-code-outline" size={24} color={Colors.success} />
-                  <Text style={[styles.methodItemText, dynamicStyles.text]}>DuitNow QR</Text>
-                  {paymentMethod === 'duitnow_qr' && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />}
-                </TouchableOpacity>
-
                 <TouchableOpacity style={[styles.methodItem, paymentMethod === 'card' && { borderColor: Colors.primary }]} onPress={() => selectMethod('card')}>
                   <Ionicons name="card-outline" size={24} color={Colors.primary} />
                   <Text style={[styles.methodItemText, dynamicStyles.text]}>Credit / Debit Card</Text>
@@ -385,19 +368,6 @@ export default function RideRequestScreen() {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-            )}
-
-            {/* Step: DuitNow QR */}
-            {paymentStep === 'duitnow_qr' && (
-              <View style={styles.qrContainer}>
-                <View style={styles.qrMock}>
-                  <Ionicons name="qr-code" size={100} color={Colors.primary} />
-                </View>
-                <Text style={[styles.qrLabel, dynamicStyles.text]}>Scan UTeM Ride DuitNow QR merchant code to pay</Text>
-                <TouchableOpacity style={styles.qrBtn} onPress={confirmDuitNowQR}>
-                  <Text style={styles.qrBtnText}>I Have Scanned & Paid</Text>
-                </TouchableOpacity>
-              </View>
             )}
 
             {/* Step: Card Details Entry */}

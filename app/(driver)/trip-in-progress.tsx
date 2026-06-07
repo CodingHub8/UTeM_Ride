@@ -1,10 +1,13 @@
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert } from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { PROVIDER_GOOGLE, Marker, Polyline } from 'react-native-maps';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/utils/firebase';
 
 // Mock coordinates for trip navigation
 const PICKUP_COORD = { latitude: 2.3135, longitude: 102.3211 };
@@ -42,6 +45,83 @@ export default function TripInProgressScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDark, theme } = useTheme();
+  const { user } = useAuth();
+
+  const { 
+    rideId, 
+    price, 
+    pickup, 
+    destination, 
+    passengerName, 
+    passengerUsername, 
+    passengerEmail, 
+    passengerPhone, 
+    passengerGender 
+  } = useLocalSearchParams<{
+    rideId: string;
+    price: string;
+    pickup: string;
+    destination: string;
+    passengerName: string;
+    passengerUsername: string;
+    passengerEmail: string;
+    passengerPhone: string;
+    passengerGender: string;
+  }>();
+
+  const fareValue = price ? parseFloat(price) : 12.50;
+  const commissionFee = fareValue * 0.10; // 10% App Owner Fee
+  const netEarnings = fareValue - commissionFee;
+
+  const handleCompleteTrip = async () => {
+    if (!user) {
+      router.replace('/(driver)/home');
+      return;
+    }
+
+    try {
+      // 1. Log the full passenger trip earning transaction in Firestore
+      await addDoc(collection(db, 'transactions'), {
+        user_id: user.id,
+        ride_id: rideId || 'mock_ride_id',
+        amount: fareValue,
+        payment_method: 'fpx', // Defaulting to fpx/card
+        transaction_type: 'fare_payment',
+        label: `Trip payment from passenger`,
+        status: 'completed',
+        route: {
+          pickup: pickup || 'FTMK, UTeM Main Campus',
+          destination: destination || 'Melaka Sentral Bus Terminal',
+        },
+        passenger: {
+          name: passengerName || 'Muhammad Haziq',
+          username: passengerUsername || 'haziq_utem',
+          email: passengerEmail || 'b032110123@student.utem.edu.my',
+          phone: passengerPhone || '+6011-2345 6789',
+          gender: passengerGender || 'Male'
+        },
+        created_at: serverTimestamp()
+      });
+
+      // 2. Log system commission fee deduction in Firestore (Option B)
+      await addDoc(collection(db, 'transactions'), {
+        user_id: user.id,
+        ride_id: rideId || 'mock_ride_id',
+        amount: -commissionFee,
+        payment_method: 'fpx',
+        transaction_type: 'service_fee',
+        label: `System commission fee (10%)`,
+        status: 'completed',
+        created_at: serverTimestamp()
+      });
+
+      Alert.alert('Trip Completed', `Fare: RM ${fareValue.toFixed(2)}\nFee (10%): -RM ${commissionFee.toFixed(2)}\nNet Earnings: RM ${netEarnings.toFixed(2)} credited to your wallet.`);
+      router.replace('/(driver)/home');
+    } catch (e: any) {
+      Alert.alert('Completion Error', 'Failed to log earnings. Returning to Home.');
+      router.replace('/(driver)/home');
+    }
+  };
 
   const accentColor = isDark ? Colors.primaryLight : Colors.primary;
 
@@ -116,11 +196,11 @@ export default function TripInProgressScreen() {
           <View style={{ flex: 1 }}>
             <View style={{ marginBottom: Spacing.md }}>
               <Text style={styles.routeLabel}>Picked up from</Text>
-              <Text style={[styles.routeValue, dynamicStyles.routeValue]}>--</Text>
+              <Text style={[styles.routeValue, dynamicStyles.routeValue]} numberOfLines={1}>{pickup || 'FTMK, UTeM Main Campus'}</Text>
             </View>
             <View>
               <Text style={styles.routeLabel}>Heading to</Text>
-              <Text style={[styles.routeValue, dynamicStyles.routeValue]}>--</Text>
+              <Text style={[styles.routeValue, dynamicStyles.routeValue]} numberOfLines={1}>{destination || 'Melaka Sentral Bus Terminal'}</Text>
             </View>
           </View>
         </View>
@@ -130,18 +210,18 @@ export default function TripInProgressScreen() {
         {/* Earnings & distance */}
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Earnings</Text>
-            <Text style={[styles.statValueAccent, { color: accentColor }]}>RM --</Text>
+            <Text style={styles.statLabel}>Earnings (Gross)</Text>
+            <Text style={[styles.statValueAccent, { color: accentColor }]}>RM {fareValue.toFixed(2)}</Text>
           </View>
           <View style={[styles.statDivider, dynamicStyles.statDivider]} />
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Distance</Text>
-            <Text style={[styles.statValue, dynamicStyles.statValue]}>--</Text>
+            <Text style={styles.statLabel}>Commission (10%)</Text>
+            <Text style={[styles.statValue, { color: Colors.error, fontWeight: 'bold' }]}>-RM {commissionFee.toFixed(2)}</Text>
           </View>
           <View style={[styles.statDivider, dynamicStyles.statDivider]} />
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>ETA</Text>
-            <Text style={[styles.statValue, dynamicStyles.statValue]}>--</Text>
+            <Text style={styles.statLabel}>Net Earning</Text>
+            <Text style={[styles.statValue, dynamicStyles.statValue]}>RM {netEarnings.toFixed(2)}</Text>
           </View>
         </View>
 
@@ -150,7 +230,7 @@ export default function TripInProgressScreen() {
         {/* Complete button */}
         <TouchableOpacity
           style={[styles.completeBtn, { backgroundColor: Colors.primary }]}
-          onPress={() => router.replace('/(driver)/home')}
+          onPress={handleCompleteTrip}
         >
           <Ionicons name="checkmark-done" size={22} color={Colors.white} />
           <Text style={styles.completeText}>Complete Trip</Text>

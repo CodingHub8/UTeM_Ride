@@ -21,7 +21,20 @@ export default function DriverRideRequestScreen() {
       );
       return;
     }
-    router.push('/(driver)/active-pickup');
+    router.push({
+      pathname: '/(driver)/active-pickup',
+      params: {
+        rideId: 'mock_ride_id_' + Math.random().toString(36).substring(2, 7),
+        price: '12.50',
+        pickup: 'FTMK, UTeM Main Campus',
+        destination: 'Melaka Sentral Bus Terminal',
+        passengerName: 'Muhammad Haziq',
+        passengerUsername: 'haziq_utem',
+        passengerEmail: 'b032110123@student.utem.edu.my',
+        passengerPhone: '+6011-2345 6789',
+        passengerGender: 'Male'
+      }
+    });
   };
 
   const dynamicStyles = {

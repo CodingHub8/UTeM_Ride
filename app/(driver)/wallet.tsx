@@ -1,9 +1,13 @@
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Modal, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Modal, ScrollView, Alert, TextInput, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { collection, query, where, orderBy, onSnapshot, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/utils/firebase';
+import { processBankPayout } from '@/utils/payment';
 
 interface PassengerDetails {
   name: string;
@@ -23,71 +27,195 @@ interface Transaction {
   type: 'trip' | 'withdrawal';
   label: string;
   amount: string;
+  numericAmount: number;
   time: string;
   route?: RouteInfo;
   passenger?: PassengerDetails;
 }
 
-const TRANSACTIONS: Transaction[] = [
-  {
-    id: 'tx1',
-    type: 'trip',
-    label: 'Trip payment from passenger',
-    amount: 'RM 12.50',
-    time: 'Today, 2:30 pm',
-    route: {
-      pickup: 'FTMK, UTeM Main Campus',
-      destination: 'Melaka Sentral Bus Terminal',
-    },
-    passenger: {
-      name: 'Muhammad Haziq',
-      username: 'haziq_utem',
-      email: 'b032110123@student.utem.edu.my',
-      phone: '+6011-2345 6789',
-      gender: 'Male',
-    }
-  },
-  {
-    id: 'tx2',
-    type: 'withdrawal',
-    label: 'Withdrawal to Maybank',
-    amount: '-RM 50.00',
-    time: 'Yesterday, 10:15 am',
-  },
-  {
-    id: 'tx3',
-    type: 'trip',
-    label: 'Trip payment from passenger',
-    amount: 'RM 15.00',
-    time: 'Yesterday, 8:45 am',
-    route: {
-      pickup: 'UTeM Technology Campus',
-      destination: 'AEON Bandaraya Melaka',
-    },
-    passenger: {
-      name: 'Alicia Tan Wei',
-      username: 'alicia_tan',
-      email: 'b032110456@student.utem.edu.my',
-      phone: '+6012-345 6789',
-      gender: 'Female',
-    }
-  }
+const MALAYSIAN_BANKS = [
+  'Maybank2u',
+  'CIMB Clicks',
+  'Bank Islam',
+  'Public Bank',
+  'RHB Now',
+  'AmBank',
+  'Hong Leong Connect',
 ];
 
 export default function WalletScreen() {
   const insets = useSafeAreaInsets();
   const { isDark } = useTheme();
-  const [selectedPassenger, setSelectedPassenger] = useState<PassengerDetails | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const { user } = useAuth();
 
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [selectedPassenger, setSelectedPassenger] = useState<PassengerDetails | null>(null);
+  
+  // Modals visibility
+  const [passengerModalVisible, setPassengerModalVisible] = useState(false);
+  const [bankModalVisible, setBankModalVisible] = useState(false);
+  const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
+
+  // Form states
+  const [connectedBank, setConnectedBank] = useState<{ name: string; account: string } | null>(null);
+  const [bankNameInput, setBankNameInput] = useState('');
+  const [bankAccountInput, setBankAccountInput] = useState('');
+  const [withdrawAmountInput, setWithdrawAmountInput] = useState('');
+  
+  const [bankSaving, setBankSaving] = useState(false);
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
+
+  // 1. Listen to real-time transactions from Firestore
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, 'transactions'),
+      where('user_id', '==', user.id),
+      orderBy('created_at', 'desc')
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const txs: Transaction[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        txs.push({
+          id: doc.id,
+          type: data.transaction_type === 'withdrawal' ? 'withdrawal' : 'trip',
+          label: data.label || (data.transaction_type === 'withdrawal' ? 'Withdrawal' : 'Ride Earnings'),
+          amount: (data.amount < 0 ? '-' : '') + 'RM ' + Math.abs(data.amount).toFixed(2),
+          numericAmount: data.amount,
+          time: data.created_at ? new Date(data.created_at.seconds * 1000).toLocaleString() : 'Just now',
+          route: data.route,
+          passenger: data.passenger,
+        });
+      });
+      setTransactions(txs);
+    }, (err) => {
+      console.warn('Transactions listen error:', err);
+    });
+    return unsubscribe;
+  }, [user]);
+
+  // 2. Listen to connected bank account information in the user document
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = onSnapshot(doc(db, 'users', user.id), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.bank_name && data.bank_account_number) {
+          setConnectedBank({
+            name: data.bank_name,
+            account: data.bank_account_number
+          });
+          setBankNameInput(data.bank_name);
+          setBankAccountInput(data.bank_account_number);
+        } else {
+          setConnectedBank(null);
+        }
+      }
+    });
+    return unsubscribe;
+  }, [user]);
+
+  // Calculate live e-wallet balance
+  const walletBalance = transactions.reduce((acc, tx) => acc + tx.numericAmount, 0);
+
+  // Daily statistics derived dynamically
+  const todayTripsCount = transactions.filter(t => t.type === 'trip' && t.time.includes(new Date().toLocaleDateString())).length;
+  
   const handleOpenPassenger = (passenger: PassengerDetails) => {
     setSelectedPassenger(passenger);
-    setModalVisible(true);
+    setPassengerModalVisible(true);
   };
 
   const handleClosePassenger = () => {
     setSelectedPassenger(null);
-    setModalVisible(false);
+    setPassengerModalVisible(false);
+  };
+
+  const openConnectBankModal = () => {
+    setBankModalVisible(true);
+  };
+
+  const handleSaveBank = async () => {
+    if (!bankNameInput || !bankAccountInput) {
+      Alert.alert('Incomplete Fields', 'Please select a bank and enter an account number.');
+      return;
+    }
+
+    setBankSaving(true);
+    try {
+      if (user) {
+        const userRef = doc(db, 'users', user.id);
+        await updateDoc(userRef, {
+          bank_name: bankNameInput,
+          bank_account_number: bankAccountInput,
+          updated_at: serverTimestamp()
+        });
+        Alert.alert('Success', 'Bank account connected successfully.');
+        setBankModalVisible(false);
+      }
+    } catch (e: any) {
+      Alert.alert('Connection Failed', e.message || 'Could not update bank details.');
+    } finally {
+      setBankSaving(false);
+    }
+  };
+
+  const handleOpenWithdraw = () => {
+    if (!connectedBank) {
+      Alert.alert(
+        'Bank Account Required',
+        'Please connect your bank account first before initiating a withdrawal.',
+        [{ text: 'OK', onPress: () => setBankModalVisible(true) }]
+      );
+      return;
+    }
+    setWithdrawAmountInput('');
+    setWithdrawModalVisible(true);
+  };
+
+  const handleConfirmWithdraw = async () => {
+    const numericAmount = parseFloat(withdrawAmountInput);
+    if (isNaN(numericAmount) || numericAmount < 1) {
+      Alert.alert('Invalid Amount', 'The minimum withdrawal limit is RM 1.00.');
+      return;
+    }
+    if (numericAmount > walletBalance) {
+      Alert.alert('Insufficient Funds', 'The amount exceeds your available balance.');
+      return;
+    }
+    if (!connectedBank) return;
+
+    setWithdrawLoading(true);
+    try {
+      // Trigger gateway API payout
+      const payoutResult = await processBankPayout(numericAmount, {
+        bankName: connectedBank.name,
+        accountNumber: connectedBank.account
+      });
+
+      if (payoutResult.success) {
+        // Log transaction in Firestore
+        await addDoc(collection(db, 'transactions'), {
+          user_id: user?.id,
+          amount: -numericAmount,
+          payment_method: 'fpx',
+          transaction_type: 'withdrawal',
+          label: `Withdrawal to ${connectedBank.name}`,
+          status: 'completed',
+          created_at: serverTimestamp()
+        });
+
+        Alert.alert('Withdrawal Successful', `RM ${numericAmount.toFixed(2)} has been successfully transferred to your bank account.`);
+        setWithdrawModalVisible(false);
+      } else {
+        Alert.alert('Failed', 'Gateway transfer failed. Please try again.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Withdrawal could not be completed.');
+    } finally {
+      setWithdrawLoading(false);
+    }
   };
 
   const dynamicStyles = {
@@ -105,6 +233,11 @@ export default function WalletScreen() {
     modalText: { color: isDark ? Colors.white : Colors.gray800 },
     modalLabel: { color: isDark ? Colors.gray400 : Colors.gray500 },
     modalDivider: { backgroundColor: isDark ? Colors.darkBorder : Colors.gray200 },
+    input: {
+      backgroundColor: isDark ? Colors.gray900 : Colors.gray50,
+      color: isDark ? Colors.white : Colors.gray900,
+      borderColor: isDark ? Colors.darkBorder : Colors.gray200,
+    }
   };
 
   return (
@@ -117,41 +250,43 @@ export default function WalletScreen() {
       {/* Balance card */}
       <View style={styles.balanceCard}>
         <Text style={styles.balanceLabel}>Available Balance</Text>
-        <Text style={styles.balanceValue}>RM 27.50</Text>
-        <View style={styles.balanceStats}>
-          <View style={styles.balanceStat}>
-            <Text style={styles.bStatValue}>RM 12.50</Text>
-            <Text style={styles.bStatLabel}>Today</Text>
+        <Text style={styles.balanceValue}>RM {walletBalance.toFixed(2)}</Text>
+        
+        {/* Connection status display */}
+        {connectedBank ? (
+          <View style={styles.bankStatusContainer}>
+            <Text style={styles.bankStatusText}>
+              Connected: {connectedBank.name} (***{connectedBank.account.slice(-4)})
+            </Text>
+            <TouchableOpacity onPress={openConnectBankModal} style={styles.bankStatusEditBtn}>
+              <Text style={styles.bankStatusEditText}>Edit</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.balanceStatDivider} />
-          <View style={styles.balanceStat}>
-            <Text style={styles.bStatValue}>RM 27.50</Text>
-            <Text style={styles.bStatLabel}>This Week</Text>
-          </View>
-        </View>
-        <TouchableOpacity style={styles.withdrawBtn}>
-          <Ionicons name="arrow-down-circle" size={20} color={Colors.white} />
+        ) : (
+          <TouchableOpacity onPress={openConnectBankModal} style={styles.connectBtn}>
+            <Ionicons name="link-outline" size={16} color={Colors.white} />
+            <Text style={styles.connectText}>Connect Online Banking Account</Text>
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity style={styles.withdrawBtn} onPress={handleOpenWithdraw}>
+          <Ionicons name="arrow-down-circle" size={20} color={Colors.primary} />
           <Text style={styles.withdrawText}>Withdraw</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Today's stats */}
+      {/* Stats derived from Firestore */}
       <View style={[styles.todayCard, dynamicStyles.todayCard]}>
         <View style={styles.todayRow}>
           <View style={styles.todayItem}>
             <Ionicons name="car" size={22} color={Colors.primary} />
-            <Text style={[styles.todayValue, dynamicStyles.todayValue]}>1</Text>
-            <Text style={[styles.todayLabel, dynamicStyles.todayLabel]}>Trip</Text>
+            <Text style={[styles.todayValue, dynamicStyles.todayValue]}>{todayTripsCount}</Text>
+            <Text style={[styles.todayLabel, dynamicStyles.todayLabel]}>Today's Trips</Text>
           </View>
           <View style={styles.todayItem}>
-            <Ionicons name="time" size={22} color={Colors.primary} />
-            <Text style={[styles.todayValue, dynamicStyles.todayValue]}>1.5h</Text>
-            <Text style={[styles.todayLabel, dynamicStyles.todayLabel]}>Online</Text>
-          </View>
-          <View style={styles.todayItem}>
-            <Ionicons name="navigate" size={22} color={Colors.primary} />
-            <Text style={[styles.todayValue, dynamicStyles.todayValue]}>18 km</Text>
-            <Text style={[styles.todayLabel, dynamicStyles.todayLabel]}>Driven</Text>
+            <Ionicons name="wallet-outline" size={22} color={Colors.primary} />
+            <Text style={[styles.todayValue, dynamicStyles.todayValue]}>RM 1.00</Text>
+            <Text style={[styles.todayLabel, dynamicStyles.todayLabel]}>Min Withdraw</Text>
           </View>
         </View>
       </View>
@@ -159,7 +294,7 @@ export default function WalletScreen() {
       {/* Transaction history */}
       <Text style={styles.sectionTitle}>Transaction History</Text>
       <FlatList
-        data={TRANSACTIONS}
+        data={transactions}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.txList}
         renderItem={({ item }) => (
@@ -202,7 +337,7 @@ export default function WalletScreen() {
       <Modal
         animationType="fade"
         transparent={true}
-        visible={modalVisible}
+        visible={passengerModalVisible}
         onRequestClose={handleClosePassenger}
       >
         <View style={[styles.modalOverlay, dynamicStyles.modalOverlay]}>
@@ -216,7 +351,6 @@ export default function WalletScreen() {
 
             {selectedPassenger && (
               <ScrollView contentContainerStyle={styles.modalBody}>
-                {/* Profile Header */}
                 <View style={styles.modalProfileHeader}>
                   <View style={styles.modalAvatar}>
                     <Ionicons name="person" size={40} color={Colors.white} />
@@ -225,7 +359,6 @@ export default function WalletScreen() {
                   <Text style={styles.modalUsername}>@{selectedPassenger.username}</Text>
                 </View>
 
-                {/* Details Table */}
                 <View style={styles.modalDetails}>
                   <View style={styles.detailRowItem}>
                     <Text style={[styles.detailRowLabel, dynamicStyles.modalLabel]}>Email</Text>
@@ -245,9 +378,113 @@ export default function WalletScreen() {
                   </View>
                 </View>
 
-                {/* Confirm Action Button */}
                 <TouchableOpacity style={styles.modalActionBtn} onPress={handleClosePassenger}>
                   <Text style={styles.modalActionText}>Done</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Connect Bank Account Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={bankModalVisible}
+        onRequestClose={() => setBankModalVisible(false)}
+      >
+        <View style={[styles.modalOverlay, dynamicStyles.modalOverlay]}>
+          <View style={[styles.modalContent, dynamicStyles.modalContent]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, dynamicStyles.modalTitle]}>Connect Online Banking</Text>
+              <TouchableOpacity onPress={() => setBankModalVisible(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={24} color={isDark ? Colors.white : Colors.gray900} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{ paddingBottom: Spacing.lg }}>
+              <View style={styles.formGroup}>
+                <Text style={[styles.formLabel, dynamicStyles.modalLabel]}>Select Bank</Text>
+                <View style={styles.bankSelectorContainer}>
+                  {MALAYSIAN_BANKS.map((bank) => (
+                    <TouchableOpacity
+                      key={bank}
+                      style={[
+                        styles.bankSelectOption,
+                        { borderColor: isDark ? Colors.darkBorder : Colors.gray200 },
+                        bankNameInput === bank && { borderColor: Colors.primary, backgroundColor: Colors.primary + '10' }
+                      ]}
+                      onPress={() => setBankNameInput(bank)}
+                    >
+                      <Text style={[dynamicStyles.modalText, bankNameInput === bank && { color: Colors.primary, fontWeight: 'bold' }]}>
+                        {bank}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={[styles.formLabel, dynamicStyles.modalLabel]}>Account Number</Text>
+                <TextInput
+                  style={[styles.modalInput, dynamicStyles.input]}
+                  placeholder="Enter your bank account number"
+                  placeholderTextColor={Colors.gray400}
+                  keyboardType="numeric"
+                  value={bankAccountInput}
+                  onChangeText={setBankAccountInput}
+                />
+              </View>
+
+              <TouchableOpacity style={styles.modalActionBtn} onPress={handleSaveBank} disabled={bankSaving}>
+                {bankSaving ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.modalActionText}>Connect Account</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Withdrawal Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={withdrawModalVisible}
+        onRequestClose={() => setWithdrawModalVisible(false)}
+      >
+        <View style={[styles.modalOverlay, dynamicStyles.modalOverlay]}>
+          <View style={[styles.modalContent, dynamicStyles.modalContent]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, dynamicStyles.modalTitle]}>Initiate Payout</Text>
+              <TouchableOpacity onPress={() => setWithdrawModalVisible(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={24} color={isDark ? Colors.white : Colors.gray900} />
+              </TouchableOpacity>
+            </View>
+
+            {connectedBank && (
+              <ScrollView contentContainerStyle={{ paddingBottom: Spacing.lg }}>
+                <View style={styles.withdrawSummary}>
+                  <Text style={[styles.withdrawSummaryLabel, dynamicStyles.modalLabel]}>Available Balance</Text>
+                  <Text style={[styles.withdrawSummaryValue, dynamicStyles.modalTitle]}>RM {walletBalance.toFixed(2)}</Text>
+                  <Text style={[styles.withdrawSummaryTarget, dynamicStyles.modalText]}>
+                    Target Bank: {connectedBank.name} (***{connectedBank.account.slice(-4)})
+                  </Text>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={[styles.formLabel, dynamicStyles.modalLabel]}>Withdrawal Amount (Min RM 1.00)</Text>
+                  <TextInput
+                    style={[styles.modalInput, dynamicStyles.input]}
+                    placeholder="Enter amount (e.g. 10.00)"
+                    placeholderTextColor={Colors.gray400}
+                    keyboardType="decimal-pad"
+                    value={withdrawAmountInput}
+                    onChangeText={setWithdrawAmountInput}
+                  />
+                </View>
+
+                <TouchableOpacity style={styles.modalActionBtn} onPress={handleConfirmWithdraw} disabled={withdrawLoading}>
+                  {withdrawLoading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.modalActionText}>Confirm Withdrawal</Text>}
                 </TouchableOpacity>
               </ScrollView>
             )}
@@ -265,13 +502,18 @@ const styles = StyleSheet.create({
   balanceCard: { marginHorizontal: Spacing.md, backgroundColor: Colors.primary, borderRadius: BorderRadius.xl, padding: Spacing.lg, ...Shadows.md },
   balanceLabel: { fontSize: FontSize.sm, color: 'rgba(255,255,255,0.7)', fontWeight: FontWeight.medium },
   balanceValue: { fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white, marginTop: 4 },
-  balanceStats: { flexDirection: 'row', marginTop: Spacing.md, gap: Spacing.lg },
-  balanceStat: {},
-  balanceStatDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.3)' },
-  bStatValue: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.white },
-  bStatLabel: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.7)' },
-  withdrawBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: BorderRadius.md, paddingVertical: 12, marginTop: Spacing.lg },
-  withdrawText: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.white },
+  
+  // Connection states
+  bankStatusContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.md, backgroundColor: 'rgba(255,255,255,0.12)', padding: Spacing.sm, borderRadius: BorderRadius.sm },
+  bankStatusText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: FontWeight.semibold },
+  bankStatusEditBtn: { padding: 4 },
+  bankStatusEditText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: FontWeight.bold, textDecorationLine: 'underline' },
+  connectBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: Spacing.md, backgroundColor: 'rgba(255,255,255,0.15)', padding: Spacing.sm, borderRadius: BorderRadius.sm, alignSelf: 'flex-start' },
+  connectText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: FontWeight.bold },
+  
+  withdrawBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.white, borderRadius: BorderRadius.md, paddingVertical: 12, marginTop: Spacing.lg, ...Shadows.sm },
+  withdrawText: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.primary },
+  
   todayCard: { marginHorizontal: Spacing.md, marginTop: Spacing.md, borderRadius: BorderRadius.lg, padding: Spacing.lg, ...Shadows.sm },
   todayRow: { flexDirection: 'row', justifyContent: 'space-around' },
   todayItem: { alignItems: 'center', gap: 4 },
@@ -306,6 +548,19 @@ const styles = StyleSheet.create({
   detailRowLabel: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold },
   detailRowValue: { fontSize: FontSize.sm, fontWeight: FontWeight.medium, flex: 1, textAlign: 'right', marginLeft: Spacing.md },
   modalDivider: { height: 0.5, width: '100%' },
-  modalActionBtn: { width: '100%', backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingVertical: 14, alignItems: 'center', ...Shadows.md },
+  modalActionBtn: { width: '100%', backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingVertical: 14, alignItems: 'center', ...Shadows.md, marginTop: Spacing.md },
   modalActionText: { color: Colors.white, fontSize: FontSize.md, fontWeight: FontWeight.bold },
+
+  // Form styles
+  formGroup: { marginBottom: Spacing.md, width: '100%' },
+  formLabel: { fontSize: FontSize.xs, fontWeight: FontWeight.bold, marginBottom: 8 },
+  bankSelectorContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: 4 },
+  bankSelectOption: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: BorderRadius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  modalInput: { height: 48, borderRadius: BorderRadius.md, borderWidth: 1, paddingHorizontal: Spacing.md, fontSize: FontSize.md, width: '100%' },
+  
+  // Withdrawal summary
+  withdrawSummary: { width: '100%', padding: Spacing.md, borderRadius: BorderRadius.md, backgroundColor: 'rgba(0, 87, 184, 0.08)', marginBottom: Spacing.md, alignItems: 'center' },
+  withdrawSummaryLabel: { fontSize: FontSize.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
+  withdrawSummaryValue: { fontSize: 32, fontWeight: FontWeight.bold, marginVertical: 4 },
+  withdrawSummaryTarget: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, marginTop: 4 },
 });

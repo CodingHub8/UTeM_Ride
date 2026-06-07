@@ -1,79 +1,229 @@
-// Admin Application Logic
+// UTeM Ride — Admin Portal Application Logic
+// Connected to Firebase Firestore and Authentication in Real-time
 
-// Mock Database of Registrations & Documents
-let usersDatabase = [
-  {
-    id: "B032110194",
-    name: "Muhammad Hazim",
-    role: "driver",
-    plate: "WKL 2847",
-    model: "Perodua Myvi",
-    color: "White",
-    status: "pending",
-    expiryDate: "15-05-2027",
-    reason: ""
-  },
-  {
-    id: "B032110283",
-    name: "Ahmad Danish",
-    role: "passenger",
-    plate: "",
-    model: "",
-    color: "",
-    status: "pending",
-    expiryDate: "",
-    reason: ""
-  },
-  {
-    id: "S4829104",
-    name: "Prof. Dr. Ridzuan",
-    role: "driver",
-    plate: "MCE 9942",
-    model: "Proton X70",
-    color: "Grey",
-    status: "approved",
-    expiryDate: "20-11-2026",
-    reason: ""
-  },
-  {
-    id: "B032110992",
-    name: "Sarah binti Ahmad",
-    role: "passenger",
-    plate: "",
-    model: "",
-    color: "",
-    status: "approved",
-    expiryDate: "",
-    reason: ""
-  },
-  {
-    id: "B032110842",
-    name: "Lim Wei Xiong",
-    role: "driver",
-    plate: "JAA 1234",
-    model: "Honda City",
-    color: "Black",
-    status: "rejected",
-    expiryDate: "05-02-2025",
-    reason: "Road tax has expired since 05-02-2025. Please upload a valid document."
-  },
-  {
-    id: "B032110321",
-    name: "Nursyahira binti Mohamad",
-    role: "driver",
-    plate: "VCH 8329",
-    model: "Toyota Yaris",
-    color: "Red",
-    status: "pending",
-    expiryDate: "12-09-2027",
-    reason: ""
-  }
-];
+// 1. Initialize Firebase Compat using project credentials from .env
+const firebaseConfig = {
+  apiKey:            process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain:        process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId:         process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket:     process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId:             process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+};
 
-// Active State
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+
+// Local Cache of Users & Verifications
+let usersDatabase = [];
 let currentSelectedUserId = null;
 
-// SVG Document Drawing Functions
+// ============================================================
+// AUTHENTICATION & LOGIN SCREEN CONTROL
+// ============================================================
+const loginOverlay = document.getElementById('login-overlay');
+const loginForm = document.getElementById('login-form');
+const loginEmailInput = document.getElementById('login-email');
+const loginPasswordInput = document.getElementById('login-password');
+const logoutBtn = document.getElementById('logout-btn');
+
+// Listen for Firebase Auth changes
+auth.onAuthStateChanged((user) => {
+  if (user || localStorage.getItem('admin_logged_in') === 'true') {
+    // Authenticated: hide login overlay and start database synchronization
+    loginOverlay.style.display = 'none';
+    startDatabaseListeners();
+  } else {
+    // Unauthenticated: show login overlay
+    loginOverlay.style.display = 'flex';
+  }
+});
+
+// Handle Sign In submission
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = loginEmailInput.value.trim();
+  const password = loginPasswordInput.value;
+
+  try {
+    // Try to authenticate using Firebase Auth
+    await auth.signInWithEmailAndPassword(email, password);
+  } catch (error) {
+    console.warn("Firebase Auth login failed. Checking mock fallback...", error.message);
+    // Fallback: If credentials match the requested mock details, allow mock access
+    if (email === 'admin@utemride.com' && password === 'admin12345') {
+      localStorage.setItem('admin_logged_in', 'true');
+      loginOverlay.style.display = 'none';
+      startDatabaseListeners();
+    } else {
+      alert("Invalid credentials! Please try again.\nError: " + error.message);
+    }
+  }
+});
+
+// Handle Logout
+logoutBtn.addEventListener('click', async () => {
+  try {
+    await auth.signOut();
+  } catch (err) {
+    console.error("Sign out error:", err);
+  }
+  localStorage.removeItem('admin_logged_in');
+  location.reload(); // Reload page to clear all cached listeners and data
+});
+
+
+// ============================================================
+// FIRESTORE LIVE REAL-TIME DATA SYNCHRONIZATION
+// ============================================================
+let usersUnsubscribe = null;
+let docsUnsubscribe = null;
+
+function startDatabaseListeners() {
+  if (usersUnsubscribe) usersUnsubscribe();
+  if (docsUnsubscribe) docsUnsubscribe();
+
+  // Listen to users collection
+  usersUnsubscribe = db.collection('users').onSnapshot((usersSnapshot) => {
+    // Listen to user_documents collection
+    docsUnsubscribe = db.collection('user_documents').onSnapshot((docsSnapshot) => {
+      const docsMap = {};
+      docsSnapshot.forEach((docSnap) => {
+        docsMap[docSnap.id] = docSnap.data();
+      });
+
+      const usersList = [];
+      usersSnapshot.forEach((userSnap) => {
+        const userData = userSnap.data();
+        const userId = userSnap.id;
+        const userDoc = docsMap[userId] || {};
+
+        // Driver check: if vehicle details exist in userData, or road tax in userDoc, user acts as a driver.
+        const hasVehicleData = !!(userData.vehiclePlate || userData.vehicleModel || userDoc.road_tax_url);
+        
+        // Calculate status dynamically:
+        // Approved: is_verified is true
+        // Rejected: rejection_reason is populated
+        // Pending: otherwise
+        let status = 'pending';
+        if (userData.is_verified === true || userDoc.is_verified === true) {
+          status = 'approved';
+        } else if (userData.rejection_reason || userDoc.rejection_reason) {
+          status = 'rejected';
+        }
+
+        usersList.push({
+          id: userId,
+          name: userData.name || 'Anonymous User',
+          email: userData.email || '',
+          phone: userData.phone || '',
+          role: hasVehicleData ? 'driver' : 'passenger',
+          plate: userData.vehiclePlate || '',
+          model: userData.vehicleModel || '',
+          color: userData.vehicleColor || '',
+          status: status,
+          reason: userData.rejection_reason || userDoc.rejection_reason || '',
+          matricCardUrl: userDoc.matric_card_url || '',
+          roadTaxUrl: userDoc.road_tax_url || '',
+          expiryDate: userData.roadTaxExpiry || 'N/A'
+        });
+      });
+
+      // If Firestore is completely empty, inject dummy mock data for validation/preview
+      if (usersList.length === 0) {
+        console.log("Firestore users collection is empty. Loading sandbox mock datasets.");
+        usersDatabase = getMockData();
+      } else {
+        usersDatabase = usersList;
+      }
+
+      updateStatistics();
+      renderTables();
+    }, (err) => {
+      console.error("Firestore user_documents listener failed:", err);
+    });
+  }, (err) => {
+    console.error("Firestore users listener failed:", err);
+  });
+}
+
+// Sandbox Static Data Mock generator (useful for verification when DB is empty)
+function getMockData() {
+  return [
+    {
+      id: "B032110194",
+      name: "Muhammad Hazim",
+      role: "driver",
+      plate: "WKL 2847",
+      model: "Perodua Myvi",
+      color: "White",
+      status: "pending",
+      expiryDate: "15-05-2027",
+      reason: "",
+      matricCardUrl: "",
+      roadTaxUrl: ""
+    },
+    {
+      id: "B032110283",
+      name: "Ahmad Danish",
+      role: "passenger",
+      plate: "",
+      model: "",
+      color: "",
+      status: "pending",
+      expiryDate: "",
+      reason: "",
+      matricCardUrl: "",
+      roadTaxUrl: ""
+    },
+    {
+      id: "S4829104",
+      name: "Prof. Dr. Ridzuan",
+      role: "driver",
+      plate: "MCE 9942",
+      model: "Proton X70",
+      color: "Grey",
+      status: "approved",
+      expiryDate: "20-11-2026",
+      reason: "",
+      matricCardUrl: "",
+      roadTaxUrl: ""
+    },
+    {
+      id: "B032110992",
+      name: "Sarah binti Ahmad",
+      role: "passenger",
+      plate: "",
+      model: "",
+      color: "",
+      status: "approved",
+      expiryDate: "",
+      reason: "",
+      matricCardUrl: "",
+      roadTaxUrl: ""
+    },
+    {
+      id: "B032110842",
+      name: "Lim Wei Xiong",
+      role: "driver",
+      plate: "JAA 1234",
+      model: "Honda City",
+      color: "Black",
+      status: "rejected",
+      expiryDate: "05-02-2025",
+      reason: "Road tax has expired since 05-02-2025. Please upload a valid document.",
+      matricCardUrl: "",
+      roadTaxUrl: ""
+    }
+  ];
+}
+
+
+// ============================================================
+// SVG DOCUMENT GENERATORS (FALLBACK PREVIEWS)
+// ============================================================
 function drawMatricCard(id, name) {
   return `
     <svg width="340" height="210" viewBox="0 0 340 210" xmlns="http://www.w3.org/2000/svg">
@@ -83,28 +233,17 @@ function drawMatricCard(id, name) {
           <stop offset="100%" style="stop-color:#f1f5f9;stop-opacity:1" />
         </linearGradient>
       </defs>
-      <!-- Card background -->
       <rect width="340" height="210" rx="12" fill="url(#cardGrad)" stroke="#cbd5e1" stroke-width="2"/>
-      
-      <!-- Top banner -->
       <path d="M 0 12 A 12 12 0 0 1 12 0 L 328 0 A 12 12 0 0 1 340 12 L 340 45 L 0 45 Z" fill="#0057B8"/>
       <text x="15" y="28" fill="#ffffff" font-family="'Inter', sans-serif" font-weight="bold" font-size="16">UNIVERSITI TEKNIKAL MELAKA</text>
-      
-      <!-- Student photo placeholder -->
       <rect x="20" y="60" width="90" height="110" rx="6" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="1.5"/>
       <circle cx="65" cy="100" r="22" fill="#94a3b8"/>
       <path d="M 35 148 C 35 125, 95 125, 95 148 Z" fill="#94a3b8"/>
-      
-      <!-- Details -->
       <text x="125" y="80" fill="#0057B8" font-family="'Inter', sans-serif" font-weight="800" font-size="10" letter-spacing="0.5">STUDENT MATRIC CARD</text>
-      
       <text x="125" y="105" fill="#64748b" font-family="'Inter', sans-serif" font-weight="bold" font-size="9">NAME</text>
-      <text x="125" y="122" fill="#0f172a" font-family="'Inter', sans-serif" font-weight="700" font-size="12" width="180">${name.toUpperCase()}</text>
-      
+      <text x="125" y="122" fill="#0f172a" font-family="'Inter', sans-serif" font-weight="700" font-size="12">${name.toUpperCase()}</text>
       <text x="125" y="148" fill="#64748b" font-family="'Inter', sans-serif" font-weight="bold" font-size="9">MATRIC ID</text>
       <text x="125" y="165" fill="#0f172a" font-family="'Inter', sans-serif" font-weight="bold" font-size="14">${id}</text>
-      
-      <!-- Barcode bottom -->
       <rect x="125" y="180" width="190" height="15" fill="#0f172a" rx="2"/>
       <rect x="145" y="180" width="5" height="15" fill="#ffffff"/>
       <rect x="155" y="180" width="10" height="15" fill="#ffffff"/>
@@ -128,40 +267,29 @@ function drawRoadTax(plate, model, expiryDate) {
           <stop offset="100%" style="stop-color:#dbeafe;stop-opacity:1" />
         </linearGradient>
       </defs>
-      <!-- Border and background -->
       <rect width="340" height="210" rx="8" fill="url(#roadTaxGrad)" stroke="#1e3a8a" stroke-width="4" stroke-dasharray="10 5"/>
       <rect x="8" y="8" width="324" height="194" rx="4" fill="none" stroke="#1e3a8a" stroke-width="1.5"/>
-      
-      <!-- Watermark Badge shape -->
       <circle cx="170" cy="105" r="50" fill="#3b82f6" fill-opacity="0.08" stroke="#3b82f6" stroke-width="2" stroke-opacity="0.12"/>
-      
-      <!-- JPJ Header -->
       <text x="170" y="32" fill="#1e3a8a" font-family="'Inter', sans-serif" font-weight="800" font-size="12" text-anchor="middle">JABATAN PENGANGKUTAN JALAN MALAYSIA</text>
       <text x="170" y="46" fill="#1e3a8a" font-family="'Inter', sans-serif" font-weight="bold" font-size="8" text-anchor="middle">LESEN KENDERAAN MOTOR (ROAD TAX)</text>
-      
-      <!-- Plate Badge -->
       <rect x="25" y="65" width="290" height="35" rx="6" fill="#1e3a8a"/>
       <text x="170" y="89" fill="#ffffff" font-family="'Inter', sans-serif" font-weight="900" font-size="20" text-anchor="middle" letter-spacing="2">${plate}</text>
-      
-      <!-- Details -->
       <text x="35" y="125" fill="#1e40af" font-family="'Inter', sans-serif" font-weight="bold" font-size="8">VEHICLE MODEL</text>
       <text x="35" y="140" fill="#0f172a" font-family="'Inter', sans-serif" font-weight="700" font-size="11">${model}</text>
-      
       <text x="185" y="125" fill="#1e40af" font-family="'Inter', sans-serif" font-weight="bold" font-size="8">VALID UNTIL</text>
       <text x="185" y="140" fill="#ef4444" font-family="'Inter', sans-serif" font-weight="800" font-size="11">${expiryDate}</text>
-      
-      <!-- Receipt details barcode style -->
       <text x="35" y="172" fill="#64748b" font-family="'Inter', sans-serif" font-weight="600" font-size="7">RECEIPT NO: JPJ-MY-8492027581</text>
       <text x="35" y="184" fill="#64748b" font-family="'Inter', sans-serif" font-weight="600" font-size="7">FEE PAID: RM 90.00 (M-COMMERCE)</text>
-      
-      <!-- Hologram seal representation -->
       <rect x="275" y="150" width="30" height="38" fill="#a855f7" rx="3" fill-opacity="0.8"/>
       <circle cx="290" cy="169" r="10" fill="#f43f5e" fill-opacity="0.8"/>
     </svg>
   `;
 }
 
-// App Logic Functions
+
+// ============================================================
+// DASHBOARD RENDERING & STATISTICAL UPDATES
+// ============================================================
 
 // Calculate and update dashboard statistics cards
 function updateStatistics() {
@@ -218,7 +346,7 @@ function renderTables() {
         <td>
           <div class="btn-group">
             <button class="btn btn-primary" onclick="openInspectionModal('${user.id}')">View</button>
-            ${user.status === 'pending' ? `
+            ${user.status === 'pending' && user.role !== 'passenger' ? `
               <button class="btn btn-secondary" onclick="approveDirect('${user.id}')">Approve</button>
               <button class="btn btn-danger" onclick="openRejectReasonModal('${user.id}')">Reject</button>
             ` : ''}
@@ -256,44 +384,77 @@ function renderTables() {
   }
 }
 
-// Actions & Modal Hooks
 
-// Direct Approval from table
+// ============================================================
+// MODAL INTERACTIONS & ACTIONS
+// ============================================================
+
+// Direct Approval from list view
 window.approveDirect = function(userId) {
   const user = usersDatabase.find(u => u.id === userId);
-  if (user) {
+  if (!user) return;
+
+  // Confirm popup for admin sanity
+  if (!confirm(`Are you sure you want to approve driver documents for ${user.name} (${user.id})?`)) return;
+
+  // Check if we are running in mock sandbox fallback
+  const isMock = !usersDatabase.some(u => u.matricCardUrl || u.roadTaxUrl); 
+  if (isMock || localStorage.getItem('admin_logged_in') === 'true') {
+    // If mock data, just update locally
     user.status = 'approved';
     user.reason = '';
     updateStatistics();
     renderTables();
+    return;
   }
+
+  // Firestore update
+  db.collection('users').doc(userId).update({
+    is_verified: true,
+    rejection_reason: firebase.firestore.FieldValue.delete(),
+    updated_at: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(() => {
+    return db.collection('user_documents').doc(userId).update({
+      is_verified: true,
+      verified_at: firebase.firestore.FieldValue.serverTimestamp(),
+      rejection_reason: firebase.firestore.FieldValue.delete()
+    });
+  }).catch((error) => {
+    console.error("Firestore approval update error:", error);
+    alert("Failed to update database: " + error.message);
+  });
 };
 
-// Open Document View Modal
+// Open side-by-side verification details inspector
 window.openInspectionModal = function(userId) {
   const user = usersDatabase.find(u => u.id === userId);
   if (!user) return;
 
   currentSelectedUserId = userId;
 
-  // Set text fields
+  // Render text content
   document.getElementById('modal-user-name').innerText = `Verify Documents - ${user.name}`;
   document.getElementById('modal-user-matric').innerText = `Matric / Staff ID: ${user.id}`;
   
   document.getElementById('ocr-val-name').value = user.name;
   document.getElementById('ocr-val-id').value = user.id;
 
-  // Generate and draw Matric Card SVG
-  document.getElementById('matric-image-container').innerHTML = drawMatricCard(user.id, user.name);
+  // Show uploaded image if exists, else fallback to mock SVG
+  const matricContainer = document.getElementById('matric-image-container');
+  if (user.matricCardUrl) {
+    matricContainer.innerHTML = `<img src="${user.matricCardUrl}" alt="Matric Card" style="max-width:100%; max-height:220px; border-radius:var(--radius-sm); object-fit:contain;">`;
+  } else {
+    matricContainer.innerHTML = drawMatricCard(user.id, user.name);
+  }
 
-  // Toggle Road Tax based on role
+  // Toggle Road Tax section based on role and details
   const roadTaxGroup = document.getElementById('roadtax-preview-group');
   const ocrVehicleDetails = document.getElementById('ocr-vehicle-details');
   const modalApproveBtn = document.getElementById('modal-approve-btn');
   const modalDeclineBtn = document.getElementById('modal-decline-btn');
 
-  // Configure action buttons visibility
-  if (user.status !== 'pending') {
+  // Passenger has no approve/reject buttons
+  if (user.status !== 'pending' || user.role === 'passenger') {
     modalApproveBtn.style.display = 'none';
     modalDeclineBtn.style.display = 'none';
   } else {
@@ -309,28 +470,32 @@ window.openInspectionModal = function(userId) {
     document.getElementById('ocr-val-model').value = user.model || 'N/A';
     document.getElementById('ocr-val-color').value = user.color || 'N/A';
     
-    // Draw Road Tax SVG
-    document.getElementById('roadtax-image-container').innerHTML = drawRoadTax(
-      user.plate || 'N/A', 
-      user.model || 'N/A', 
-      user.expiryDate || 'N/A'
-    );
+    const roadtaxContainer = document.getElementById('roadtax-image-container');
+    if (user.roadTaxUrl) {
+      roadtaxContainer.innerHTML = `<img src="${user.roadTaxUrl}" alt="Road Tax / VOC" style="max-width:100%; max-height:220px; border-radius:var(--radius-sm); object-fit:contain;">`;
+    } else {
+      roadtaxContainer.innerHTML = drawRoadTax(
+        user.plate || 'N/A', 
+        user.model || 'N/A', 
+        user.expiryDate || 'N/A'
+      );
+    }
   } else {
     roadTaxGroup.style.display = 'none';
     ocrVehicleDetails.style.display = 'none';
   }
 
-  // Open Modal
+  // Display modal overlay
   document.getElementById('view-modal').style.display = 'flex';
 };
 
-// Close view modal
+// Close View Modal
 document.getElementById('close-view-modal').addEventListener('click', () => {
   document.getElementById('view-modal').style.display = 'none';
   currentSelectedUserId = null;
 });
 
-// Approve from inside Modal
+// Modal approve event click
 document.getElementById('modal-approve-btn').addEventListener('click', () => {
   if (currentSelectedUserId) {
     approveDirect(currentSelectedUserId);
@@ -339,21 +504,21 @@ document.getElementById('modal-approve-btn').addEventListener('click', () => {
   }
 });
 
-// Reject from inside Modal
+// Modal decline event click
 document.getElementById('modal-decline-btn').addEventListener('click', () => {
   if (currentSelectedUserId) {
     openRejectReasonModal(currentSelectedUserId);
   }
 });
 
-// Open Reject Reason modal
+// Open Reject Reason Overlay Modal
 window.openRejectReasonModal = function(userId) {
   currentSelectedUserId = userId;
   document.getElementById('reject-reason-text').value = '';
   document.getElementById('reject-modal').style.display = 'flex';
 };
 
-// Close Reject Reason modal
+// Close Reject Reason Modal
 document.getElementById('close-reject-modal').addEventListener('click', () => {
   document.getElementById('reject-modal').style.display = 'none';
 });
@@ -361,7 +526,7 @@ document.getElementById('cancel-reject-btn').addEventListener('click', () => {
   document.getElementById('reject-modal').style.display = 'none';
 });
 
-// Confirm rejection with reason
+// Confirm rejection and write to database with reason
 document.getElementById('confirm-reject-btn').addEventListener('click', () => {
   const reason = document.getElementById('reject-reason-text').value.trim();
   if (!reason) {
@@ -370,45 +535,66 @@ document.getElementById('confirm-reject-btn').addEventListener('click', () => {
   }
 
   const user = usersDatabase.find(u => u.id === currentSelectedUserId);
-  if (user) {
+  if (!user) return;
+
+  const isMock = !usersDatabase.some(u => u.matricCardUrl || u.roadTaxUrl); 
+  if (isMock || localStorage.getItem('admin_logged_in') === 'true') {
+    // Local mock update
     user.status = 'rejected';
     user.reason = reason;
-    
     updateStatistics();
     renderTables();
     
-    // Close both modals
     document.getElementById('reject-modal').style.display = 'none';
     document.getElementById('view-modal').style.display = 'none';
     currentSelectedUserId = null;
+    return;
   }
+
+  // Firestore write rejection reason
+  db.collection('users').doc(currentSelectedUserId).update({
+    is_verified: false,
+    rejection_reason: reason,
+    updated_at: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(() => {
+    return db.collection('user_documents').doc(currentSelectedUserId).update({
+      is_verified: false,
+      rejection_reason: reason,
+      rejected_at: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }).then(() => {
+    document.getElementById('reject-modal').style.display = 'none';
+    document.getElementById('view-modal').style.display = 'none';
+    currentSelectedUserId = null;
+  }).catch((error) => {
+    console.error("Firestore rejection update error:", error);
+    alert("Failed to reject document in database: " + error.message);
+  });
 });
 
-// Search & Filter event listeners
+
+// ============================================================
+// FILTERS & TAB HANDLERS
+// ============================================================
 document.getElementById('search-bar').addEventListener('input', renderTables);
 document.getElementById('role-filter').addEventListener('change', renderTables);
 document.getElementById('status-filter').addEventListener('change', renderTables);
 
-// View backlog navigation shortcut
 document.getElementById('view-all-backlog').addEventListener('click', () => {
   const tab = document.querySelector('.menu-item[data-tab="verifications"]');
   tab.click();
-  // Set status filter to Pending only to easily view pending items
   document.getElementById('status-filter').value = 'pending';
   renderTables();
 });
 
-// Tab Navigation Logic
+// Tab Routing Menu items
 const menuItems = document.querySelectorAll('.menu-item');
 menuItems.forEach(item => {
   item.addEventListener('click', (e) => {
     e.preventDefault();
-    
-    // Active tab style toggle
     menuItems.forEach(mi => mi.classList.remove('active'));
     item.classList.add('active');
 
-    // Section switch
     const tabName = item.getAttribute('data-tab');
     document.querySelectorAll('.content-section').forEach(sec => sec.classList.remove('active'));
     document.getElementById(`${tabName}-section`).classList.add('active');
@@ -417,8 +603,6 @@ menuItems.forEach(item => {
 
 // Theme Mode toggler logic
 const themeToggleBtn = document.getElementById('theme-toggle');
-
-// Load saved theme
 const savedTheme = localStorage.getItem('admin-theme') || 'light';
 document.documentElement.setAttribute('data-theme', savedTheme);
 
@@ -430,5 +614,7 @@ themeToggleBtn.addEventListener('click', () => {
 });
 
 // Initial Setup
+// Default status-filter selection is All Statuses ('all')
+document.getElementById('status-filter').value = 'all';
 updateStatistics();
 renderTables();

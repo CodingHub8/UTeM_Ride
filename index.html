@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UTeM Ride — Smart & Safe Campus Carpooling</title>
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="landing-style.css">
+</head>
+<body>
+  <!-- Header Navigation -->
+  <header class="navbar">
+    <div class="nav-container">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="3"/><path d="M9 17h6"/><circle cx="17" cy="17" r="3"/></svg>
+        </div>
+        <span>UTeM Ride</span>
+      </div>
+      <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How It Works</a>
+        <a href="#download" class="btn btn-secondary nav-cta">Download App</a>
+        <a href="admin/index.html" class="admin-portal-link">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Portal Admin
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-container">
+      <div class="hero-content">
+        <span class="hero-badge">Official UTeM Carpooling Solution</span>
+        <h1>Smart & Safe Campus Ride-Sharing</h1>
+        <p>Connect with fellow UTeM students and staff for daily commutes. Share rides, split fares, and reduce carbon footprint across campuses safely using your matric credentials.</p>
+        
+        <div class="hero-actions">
+          <a href="assets/utem-ride.apk" download class="btn btn-primary btn-lg">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.3l1.816 3.146a.5.5 0 0 1-.183.683.501.501 0 0 1-.683-.183l-1.836-3.18A9.873 9.873 0 0 1 12 16c-1.77 0-3.415-.46-4.85-1.258l-1.84 3.193a.501.501 0 0 1-.683.183.5.5 0 0 1-.183-.683l1.815-3.147A9.957 9.957 0 0 1 2.05 9H21.95a9.957 9.957 0 0 1-4.427 6.3zM5.5 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm13 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 2a10.024 10.024 0 0 0-9.876 8h19.752A10.024 10.024 0 0 0 12 2z"/></svg>
+            Download Android APK
+          </a>
+          <a href="#how-it-works" class="btn btn-outline btn-lg">Learn More</a>
+        </div>
+        
+        <div class="hero-stats">
+          <div class="stat-item">
+            <strong>100%</strong>
+            <span>UTeM Verified Users</span>
+          </div>
+          <div class="stat-item">
+            <strong>RM 1.00</strong>
+            <span>Min Withdrawal</span>
+          </div>
+          <div class="stat-item">
+            <strong>10%</strong>
+            <span>Flat Commission</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- CSS Phone Mockup Illustration -->
+      <div class="hero-mockup">
+        <div class="phone-frame">
+          <div class="phone-screen">
+            <div class="phone-header">
+              <div class="phone-speaker"></div>
+              <div class="phone-camera"></div>
+            </div>
+            <!-- Mock UTeM Ride App UI Screen -->
+            <div class="app-ui">
+              <div class="app-navbar">
+                <div class="app-user-menu">
+                  <div class="app-avatar">MH</div>
+                  <div>
+                    <span class="app-welcome">Hi, Hazim!</span>
+                    <span class="app-status">Driver • Verified</span>
+                  </div>
+                </div>
+                <div class="app-wallet-badge">RM 48.50</div>
+              </div>
+              
+              <div class="app-body">
+                <div class="app-map-placeholder">
+                  <div class="map-grid"></div>
+                  <!-- Pickup Marker -->
+                  <div class="marker pickup">
+                    <span class="pulse"></span>
+                    <div class="marker-card">Kolej Lestari</div>
+                  </div>
+                  <!-- Destination Marker -->
+                  <div class="marker destination">
+                    <div class="marker-card">FTMK Campus</div>
+                  </div>
+                  <!-- Car Icon moving -->
+                  <div class="marker-car-icon">🚗</div>
+                </div>
+                
+                <div class="app-ride-card">
+                  <div class="app-card-header">
+                    <h4>Active Ride Request</h4>
+                    <span class="fare-text">RM 6.00</span>
+                  </div>
+                  <div class="ride-detail-row">
+                    <div class="detail-icon">•</div>
+                    <div class="detail-text">
+                      <strong>Pickup Point</strong>
+                      <span>Kolej Kediaman Lestari UTeM</span>
+                    </div>
+                  </div>
+                  <div class="ride-detail-row">
+                    <div class="detail-icon red">•</div>
+                    <div class="detail-text">
+                      <strong>Destination</strong>
+                      <span>FTMK Main Building, Kampus Induk</span>
+                    </div>
+                  </div>
+                  <div class="payment-badges">
+                    <span class="badge-tag">Card Payment</span>
+                    <span class="badge-tag green">10% Fee Auto-Deducted</span>
+                  </div>
+                  <button class="app-action-btn" onclick="alert('Demo Mock: Ride Accepted!')">Accept Ride Request</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="features">
+    <div class="container">
+      <div class="section-title">
+        <h2>Features Designed for UTeM</h2>
+        <p>A safe, efficient, and cost-effective transportation ecosystem for campuses.</p>
+      </div>
+      
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon purple">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h3>Verified UTeM Circle Only</h3>
+          <p>Strictly secure authentication utilizing UTeM domain emails (`@student.utem.edu.my` or `@utem.edu.my`) paired with Matric Card OCR verification to shield the campus community.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon blue">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+          </div>
+          <h3>Real-time Interactive Maps</h3>
+          <p>Passenger location pinning, live coordinates routing, and destination matching mapping between Kampus Induk, Kampus Teknologi, and nearby student hubs.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon green">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+          <h3>Secure E-Wallet Payments</h3>
+          <p>Cashless convenience. Supports Cash, Secure Visa/Mastercard payments, and FPX Online Banking, crediting drivers directly upon ride completion.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon yellow">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          <h3>RM 1.00 Payout Minimums</h3>
+          <p>Drivers can withdraw earnings to saved bank details at any time with a low minimum limit of only RM 1.00, keeping funds accessible when needed.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon red">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <h3>10% Clear Flat Commission</h3>
+          <p>No hidden charges. Rides completions credit drivers automatically, deducting a flat 10% app platform fee transparently logged under e-wallet ledger details.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon purple">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3-3.5 3.5z"/></svg>
+          </div>
+          <h3>Gender Matching Security</h3>
+          <p>Safety-focused options allowing female passengers to book exclusively with female drivers and vice-versa, offering ultimate peace of mind during transit.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works Section -->
+  <section id="how-it-works" class="how-it-works">
+    <div class="container">
+      <div class="section-title">
+        <h2>How It Works</h2>
+        <p>Simplified steps for getting your ride or sharing your car.</p>
+      </div>
+      
+      <div class="how-grid">
+        <div class="how-column">
+          <h3>For Passengers</h3>
+          <ul class="steps-list">
+            <li>
+              <div class="step-num">1</div>
+              <div>
+                <h4>Request a Ride</h4>
+                <p>Pin your pickup point on the map, select destination (e.g. FTMK, Kampus Induk), choose payment method (FPX, Card, or Cash).</p>
+              </div>
+            </li>
+            <li>
+              <div class="step-num">2</div>
+              <div>
+                <h4>Match with Driver</h4>
+                <p>Get matched with a verified student driver traveling along the same route. Live tracking updates as the driver approaches.</p>
+              </div>
+            </li>
+            <li>
+              <div class="step-num">3</div>
+              <div>
+                <h4>Complete & Paid</h4>
+                <p>Reach your destination safely. E-wallet balances are automatically adjusted, or cash is paid directly to the driver.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+        
+        <div class="how-column">
+          <h3>For Drivers</h3>
+          <ul class="steps-list">
+            <li>
+              <div class="step-num">1</div>
+              <div>
+                <h4>Upload Driving Documents</h4>
+                <p>Register using UTeM matric card, add vehicle details, and upload road tax documents. Approvals are processed within 1-7 business days.</p>
+              </div>
+            </li>
+            <li>
+              <div class="step-num">2</div>
+              <div>
+                <h4>Accept Commuting Rides</h4>
+                <p>Switch to Driver Mode, view incoming student ride requests, and accept routes matching your daily academic schedule.</p>
+              </div>
+            </li>
+            <li>
+              <div class="step-num">3</div>
+              <div>
+                <h4>Earn & Payout</h4>
+                <p>Keep 90% of the fare. Fares are credited to your in-app e-wallet. Request payout to your saved bank account for amounts as low as RM 1.00.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Download Section -->
+  <section id="download" class="download-section">
+    <div class="download-container">
+      <div class="download-text">
+        <h2>Ready to commute smart?</h2>
+        <p>Download the UTeM Ride app and join thousands of students traveling between campuses efficiently every single day.</p>
+        <div class="download-buttons">
+          <a href="assets/utem-ride.apk" download class="btn btn-primary btn-lg">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.3l1.816 3.146a.5.5 0 0 1-.183.683.501.501 0 0 1-.683-.183l-1.836-3.18A9.873 9.873 0 0 1 12 16c-1.77 0-3.415-.46-4.85-1.258l-1.84 3.193a.501.501 0 0 1-.683.183.5.5 0 0 1-.183-.683l1.815-3.147A9.957 9.957 0 0 1 2.05 9H21.95a9.957 9.957 0 0 1-4.427 6.3zM5.5 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm13 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 2a10.024 10.024 0 0 0-9.876 8h19.752A10.024 10.024 0 0 0 12 2z"/></svg>
+            Download UTeM Ride Android APK
+          </a>
+        </div>
+      </div>
+      <div class="download-badge-icon">🚗</div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <p>&copy; 2026 Universiti Teknikal Malaysia Melaka. All rights reserved.</p>
+      <div class="footer-links">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How It Works</a>
+        <a href="admin/index.html">Portal Admin</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

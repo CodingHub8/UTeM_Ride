@@ -1,5 +1,5 @@
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { PROVIDER_GOOGLE, Marker, Polyline } from 'react-native-maps';
@@ -42,6 +42,45 @@ export default function ActivePickupScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDark, theme } = useTheme();
+
+  const { 
+    rideId, 
+    price, 
+    pickup, 
+    destination, 
+    passengerName, 
+    passengerUsername, 
+    passengerEmail, 
+    passengerPhone, 
+    passengerGender 
+  } = useLocalSearchParams<{
+    rideId: string;
+    price: string;
+    pickup: string;
+    destination: string;
+    passengerName: string;
+    passengerUsername: string;
+    passengerEmail: string;
+    passengerPhone: string;
+    passengerGender: string;
+  }>();
+
+  const handleArrived = () => {
+    router.push({
+      pathname: '/(driver)/trip-in-progress',
+      params: { 
+        rideId, 
+        price, 
+        pickup, 
+        destination, 
+        passengerName, 
+        passengerUsername, 
+        passengerEmail, 
+        passengerPhone, 
+        passengerGender 
+      }
+    });
+  };
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? Colors.darkBg : Colors.gray50 },
@@ -111,8 +150,8 @@ export default function ActivePickupScreen() {
             <Ionicons name="person" size={24} color={Colors.white} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.passengerName, dynamicStyles.passengerName]}>Passenger</Text>
-            <Text style={[styles.pickupAddr, dynamicStyles.pickupAddr]}>--</Text>
+            <Text style={[styles.passengerName, dynamicStyles.passengerName]}>{passengerName || 'Passenger'}</Text>
+            <Text style={[styles.pickupAddr, dynamicStyles.pickupAddr]}>{pickup || 'FTMK, UTeM Main Campus'}</Text>
           </View>
           <TouchableOpacity style={styles.contactBtn}>
             <Ionicons name="call" size={20} color={Colors.primary} />
@@ -131,7 +170,7 @@ export default function ActivePickupScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.arrivedBtn}
-            onPress={() => router.push('/(driver)/trip-in-progress')}
+            onPress={handleArrived}
           >
             <Ionicons name="checkmark-circle" size={22} color={Colors.white} />
             <Text style={styles.arrivedText}>{"I've Arrived"}</Text>
