@@ -34,6 +34,13 @@ export default function PassengerLayout() {
         }}
       />
       <Tabs.Screen
+        name="set-destination"
+        options={{
+          title: 'Set Destination',
+          tabBarIcon: ({ color, size }) => <Ionicons name="location" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="carpool-slots"
         options={{
           title: 'Carpool',
@@ -55,7 +62,6 @@ export default function PassengerLayout() {
         }}
       />
       {/* Hide non-tab screens from the tab bar */}
-      <Tabs.Screen name="set-destination" options={{ href: null }} />
       <Tabs.Screen name="ride-request" options={{ href: null }} />
       <Tabs.Screen name="active-ride" options={{ href: null }} />
     </Tabs>

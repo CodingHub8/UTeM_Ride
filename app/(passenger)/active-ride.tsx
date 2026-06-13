@@ -158,14 +158,20 @@ export default function ActiveRideScreen() {
 
         {/* Route */}
         <View style={styles.routeRow}>
-          <View style={styles.routeMarkers}>
+          <View style={[styles.routeMarkers, { paddingTop: 4 }]}>
             <View style={[styles.dot, { backgroundColor: Colors.success }]} />
-            <View style={[styles.dotLine, dynamicStyles.divider]} />
+            <View style={[styles.dotLine, { height: 36, marginVertical: 4 }, dynamicStyles.divider]} />
             <View style={[styles.dot, { backgroundColor: Colors.error }]} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.routeLabel, dynamicStyles.text]} numberOfLines={1}>{pickupAddress || 'Current Location'}</Text>
-            <Text style={[styles.routeLabel, dynamicStyles.text, { marginTop: 20 }]} numberOfLines={1}>{destinationName}</Text>
+            <View style={{ marginBottom: Spacing.sm }}>
+              <Text style={{ fontSize: FontSize.xs, color: Colors.gray400, textTransform: 'uppercase', letterSpacing: 0.5 }}>Pickup</Text>
+              <Text style={[styles.routeLabel, dynamicStyles.text, { marginTop: 2 }]}>{pickupAddress || 'Current Location'}</Text>
+            </View>
+            <View>
+              <Text style={{ fontSize: FontSize.xs, color: Colors.gray400, textTransform: 'uppercase', letterSpacing: 0.5 }}>Destination</Text>
+              <Text style={[styles.routeLabel, dynamicStyles.text, { marginTop: 2 }]}>{destinationName}</Text>
+            </View>
           </View>
         </View>
 

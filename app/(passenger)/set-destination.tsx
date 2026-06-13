@@ -3,28 +3,26 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { FlatList, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View, Alert } from 'react-native';
+import { useEffect, useState, useRef } from 'react';
+import { FlatList, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { getCurrentLocationAddress, getDirections, getNearbyPlaces, getPlaceAutocomplete, getPlaceDetails, getRecentDestinations } from '@/utils/location';
+import { getCurrentLocationAddress, getDirections, getNearbyPlaces, getPlaceAutocomplete, getPlaceDetails, getRecentDestinations, getRecentPickups } from '@/utils/location';
 
 const BASE_FARES = {
-  economy: 2.00,
-  comfort: 3.00,
-  premium: 5.00,
+  standard: 1.00,
+  premium: 3.00,
   motorcycle: 1.00,
-  carpool: 1.50
+  carpool: 0.90
 };
 
-const RATE_PER_KM = 1.00; 
+const RATE_PER_KM = 0.50; 
 
 const RIDE_TYPES = [
-  { id: 'economy', name: 'Economy', icon: '🚗', basePrice: BASE_FARES.economy, seats: 4 },
-  { id: 'comfort', name: 'Comfort', icon: '🚙', basePrice: BASE_FARES.comfort, seats: 4 },
-  { id: 'premium', name: 'Premium', icon: '✨', basePrice: BASE_FARES.premium, seats: 6 },
-  { id: 'motorcycle', name: 'Motorcycle', icon: '🏍️', basePrice: BASE_FARES.motorcycle, seats: 2 },
-  { id: 'carpool', name: 'Car Pool', icon: '👥', basePrice: BASE_FARES.carpool, seats: 3 },
+  { id: 'standard', name: 'Standard', icon: '🚗', basePrice: BASE_FARES.standard, seats: '3-4' },
+  { id: 'premium', name: 'Premium', icon: '✨', basePrice: BASE_FARES.premium, seats: '5-6' },
+  { id: 'motorcycle', name: 'Motorcycle', icon: '🏍️', basePrice: BASE_FARES.motorcycle, seats: '1' },
+  { id: 'carpool', name: 'Car Pool', icon: '👥', basePrice: BASE_FARES.carpool, seats: '3-6' },
 ];
 
 export default function SetDestinationScreen() {
@@ -32,6 +30,7 @@ export default function SetDestinationScreen() {
   const router = useRouter();
   const { isDark } = useTheme();
   const { user } = useAuth();
+  const destinationInputRef = useRef<TextInput>(null);
   
   const { initialDestination, destLat, destLng } = useLocalSearchParams<{
     initialDestination?: string,
@@ -42,7 +41,7 @@ export default function SetDestinationScreen() {
   const [activeInput, setActiveInput] = useState<'pickup' | 'destination'>('destination');
   const [query, setQuery] = useState('');
   const [selectedPlace, setSelectedPlace] = useState<string | null>(null);
-  const [selectedRide, setSelectedRide] = useState('economy');
+  const [selectedRide, setSelectedRide] = useState('standard');
   
   const [pickupAddress, setPickupAddress] = useState('Fetching current location...');
   const [pickupCoords, setPickupCoords] = useState<{ latitude: number, longitude: number } | null>(null);
@@ -61,8 +60,27 @@ export default function SetDestinationScreen() {
 
   useEffect(() => {
     (async () => {
-      const recent = await getRecentDestinations();
-      setRecentPlaces(recent);
+      const recentD = await getRecentDestinations();
+      const recentP = await getRecentPickups();
+      
+      const combined: any[] = [];
+      const seen = new Set<string>();
+      
+      recentP.forEach((p: any) => {
+        if (p.name && !seen.has(p.name)) {
+          combined.push({ ...p, isRecent: true });
+          seen.add(p.name);
+        }
+      });
+      
+      recentD.forEach((d: any) => {
+        if (d.name && !seen.has(d.name)) {
+          combined.push({ ...d, isRecent: true });
+          seen.add(d.name);
+        }
+      });
+      
+      setRecentPlaces(combined.slice(0, 8));
 
       if (pickupCoords) {
         const recommended = await getNearbyPlaces(pickupCoords.latitude, pickupCoords.longitude);
@@ -103,6 +121,26 @@ export default function SetDestinationScreen() {
       }
     })();
   }, []);
+
+  const [fetchingLoc, setFetchingLoc] = useState(false);
+
+  const fetchCurrentLocation = async () => {
+    setFetchingLoc(true);
+    setPickupQuery('Fetching location...');
+    const loc = await getCurrentLocationAddress();
+    if (loc) {
+      setPickupAddress(loc.address);
+      setPickupCoords(loc.coords);
+      setPickupQuery(loc.address);
+      setSelectedPickupPlace(loc.address);
+    } else {
+      setPickupAddress('Current Location');
+      setPickupQuery('Current Location');
+      setSelectedPickupPlace('Current Location');
+      Alert.alert('Location Access Failed', 'Could not retrieve current location.');
+    }
+    setFetchingLoc(false);
+  };
 
   useEffect(() => {
     if (selectedPlace && pickupAddress) {
@@ -228,6 +266,9 @@ export default function SetDestinationScreen() {
                   setActiveInput('pickup');
                   if (selectedPickupPlace) setSelectedPickupPlace(null);
                 }}
+                onSubmitEditing={() => destinationInputRef.current?.focus()}
+                blurOnSubmit={false}
+                multiline={true}
               />
               {pickupQuery.length > 0 && (
                 <TouchableOpacity
@@ -242,6 +283,17 @@ export default function SetDestinationScreen() {
                   <Ionicons name="close-circle" size={20} color={isDark ? Colors.gray500 : Colors.gray400} />
                 </TouchableOpacity>
               )}
+              <TouchableOpacity
+                onPress={fetchCurrentLocation}
+                style={styles.locateBtn}
+                disabled={fetchingLoc}
+              >
+                {fetchingLoc ? (
+                  <ActivityIndicator size="small" color={Colors.primary} />
+                ) : (
+                  <Ionicons name="locate-outline" size={20} color={Colors.primary} />
+                )}
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -252,6 +304,7 @@ export default function SetDestinationScreen() {
             <Text style={styles.locLabel}>Destination</Text>
             <View style={styles.searchInputWrapper}>
               <TextInput
+                ref={destinationInputRef}
                 style={[styles.searchInput, dynamicStyles.text]}
                 placeholder="Search destination..."
                 placeholderTextColor={isDark ? Colors.gray600 : Colors.gray400}
@@ -264,6 +317,8 @@ export default function SetDestinationScreen() {
                   setActiveInput('destination');
                   if (selectedPlace) setSelectedPlace(null);
                 }}
+                multiline={true}
+                blurOnSubmit={true}
               />
               {query.length > 0 && (
                 <TouchableOpacity
@@ -284,17 +339,25 @@ export default function SetDestinationScreen() {
         </View>
       </View>
 
-      {!selectedPlace ? (
+      {!selectedPlace || !pickupQuery.trim() ? (
         <View style={{ flex: 1 }}>
-          {query.length === 0 && pickupQuery.length === 0 && (
-            <Text style={[styles.sectionTitle, dynamicStyles.text, { marginHorizontal: Spacing.md, marginTop: Spacing.md, marginBottom: 0 }]}>
-              {recentPlaces.length > 0 ? 'Recent & Recommended' : 'Recommended for you'}
-            </Text>
-          )}
           <FlatList
             data={filtered}
             keyExtractor={(i) => i.id}
             style={styles.list}
+            ListHeaderComponent={() => {
+              const showDestinationTitle = query.length === 0 && pickupQuery.length === 0;
+
+              return (
+                <View>
+                  {showDestinationTitle && (
+                    <Text style={[styles.sectionTitle, dynamicStyles.text, { marginTop: Spacing.xs, marginBottom: Spacing.sm }]}>
+                      {recentPlaces.length > 0 ? 'Recent & Recommended' : 'Recommended for you'}
+                    </Text>
+                  )}
+                </View>
+              );
+            }}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={[styles.resultRow, dynamicStyles.border]}
@@ -459,7 +522,7 @@ export default function SetDestinationScreen() {
                     address: selectedPlace,
                     rideType: ride?.name,
                     price: fare,
-                    pickupAddress: pickupAddress,
+                    pickupAddress: pickupQuery || pickupAddress,
                     pickupLat: pickupCoords?.latitude,
                     pickupLng: pickupCoords?.longitude,
                     destLat: selectedCoords?.latitude?.toString() || destLat,
@@ -530,13 +593,16 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   headerTitle: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.gray900 },
   locationCard: { marginHorizontal: Spacing.md, borderRadius: BorderRadius.lg, padding: Spacing.md, borderWidth: 1 },
-  locationRow: { flexDirection: 'row', alignItems: 'center' },
-  dot: { width: 12, height: 12, borderRadius: 6, marginRight: Spacing.md },
+  locationRow: { flexDirection: 'row', alignItems: 'flex-start', paddingTop: 6 },
+  dot: { width: 12, height: 12, borderRadius: 6, marginRight: Spacing.md, marginTop: 8 },
   locInput: { flex: 1 },
   locLabel: { fontSize: FontSize.xs, color: Colors.gray400, fontWeight: FontWeight.medium, textTransform: 'uppercase', letterSpacing: 0.5 },
-  searchInputWrapper: { flexDirection: 'row', alignItems: 'center' },
+  searchInputWrapper: { flexDirection: 'row', alignItems: 'flex-start' },
   searchInput: { flex: 1, fontSize: FontSize.md, paddingVertical: 4 },
   clearBtn: { padding: 4 },
+  locateBtn: { padding: 4, marginLeft: 4 },
+  seeMoreBtn: { paddingVertical: Spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  seeMoreText: { color: Colors.primary, fontWeight: FontWeight.semibold, fontSize: FontSize.sm },
   divider: { height: 1, marginVertical: Spacing.sm, marginLeft: 28 },
   list: { flex: 1, paddingHorizontal: Spacing.md, marginTop: Spacing.sm },
   resultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.sm, borderBottomWidth: 1 },

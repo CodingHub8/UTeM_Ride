@@ -18,7 +18,7 @@ import Animated, {
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { getRecentDestinations, saveRecentDestination } from '@/utils/location';
+import { getRecentDestinations, saveRecentDestination, getRecentPickups } from '@/utils/location';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('screen');
 const COLLAPSED_HEIGHT = 160; 
@@ -65,18 +65,38 @@ export default function PassengerHomeScreen() {
   const mapRef = useRef<MapView>(null);
   
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
   const [tappedLocation, setTappedLocation] = useState<{ latitude: number, longitude: number, address?: string } | null>(null);
   const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
+
+  const loadRecent = async () => {
+    try {
+      const recentD = await getRecentDestinations();
+      const recentP = await getRecentPickups();
+      const combined: any[] = [];
+      const seen = new Set<string>();
+      recentP.forEach((p: any) => {
+        if (p.name && !seen.has(p.name)) {
+          combined.push({ ...p, icon: 'time', isRecent: true });
+          seen.add(p.name);
+        }
+      });
+      recentD.forEach((d: any) => {
+        if (d.name && !seen.has(d.name)) {
+          combined.push({ ...d, icon: 'location', isRecent: true });
+          seen.add(d.name);
+        }
+      });
+      setRecentPlaces(combined.slice(0, 8));
+    } catch (e) {
+      console.error('Error loading recent locations on home:', e);
+    }
+  };
   
   // Refresh recent places whenever the screen is focused
   useEffect(() => {
-    const loadRecent = async () => {
-      const recent = await getRecentDestinations();
-      setRecentPlaces(recent);
-    };
-
     loadRecent(); // Initial load
     
     // Check permission immediately
@@ -105,11 +125,10 @@ export default function PassengerHomeScreen() {
     })();
   }, []);
 
-  // Refresh recent places whenever the screen is focused
   const navigation = useNavigation();
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      getRecentDestinations().then(setRecentPlaces);
+      loadRecent();
     });
     return unsubscribe;
   }, [navigation]);
@@ -118,21 +137,29 @@ export default function PassengerHomeScreen() {
   const context = useSharedValue({ y: SNAP_BOTTOM });
 
   const gesture = Gesture.Pan()
+    .enabled(!isLocked)
     .onStart(() => {
+      if (isLocked) return;
       context.value = { y: translateY.value };
     })
     .onUpdate((event) => {
+      if (isLocked) return;
       translateY.value = event.translationY + context.value.y;
       // Strict boundaries
       if (translateY.value < SNAP_TOP) translateY.value = SNAP_TOP;
       if (translateY.value > SNAP_BOTTOM) translateY.value = SNAP_BOTTOM;
     })
     .onEnd((event) => {
+      if (isLocked) return;
       if (event.velocityY > 500) {
-        translateY.value = withSpring(SNAP_BOTTOM, { damping: 20, stiffness: 90 });
+        translateY.value = withTiming(SNAP_BOTTOM, { duration: 300 });
         runOnJS(setIsCollapsed)(true);
       } else if (event.velocityY < -500) {
-        translateY.value = withSpring(SNAP_TOP, { damping: 20, stiffness: 90 });
+        translateY.value = withTiming(SNAP_TOP, { duration: 300 }, (isFinished) => {
+          if (isFinished) {
+            runOnJS(setIsLocked)(true);
+          }
+        });
         runOnJS(setIsCollapsed)(false);
       } else {
         // Snap to nearest
@@ -143,13 +170,17 @@ export default function PassengerHomeScreen() {
         const minDist = Math.min(distTop, distMid, distBottom);
         
         if (minDist === distTop) {
-          translateY.value = withSpring(SNAP_TOP, { damping: 20, stiffness: 90 });
+          translateY.value = withTiming(SNAP_TOP, { duration: 300 }, (isFinished) => {
+            if (isFinished) {
+              runOnJS(setIsLocked)(true);
+            }
+          });
           runOnJS(setIsCollapsed)(false);
         } else if (minDist === distMid) {
-          translateY.value = withSpring(SNAP_MID, { damping: 20, stiffness: 90 });
+          translateY.value = withTiming(SNAP_MID, { duration: 300 });
           runOnJS(setIsCollapsed)(false);
         } else {
-          translateY.value = withSpring(SNAP_BOTTOM, { damping: 20, stiffness: 90 });
+          translateY.value = withTiming(SNAP_BOTTOM, { duration: 300 });
           runOnJS(setIsCollapsed)(true);
         }
       }
@@ -162,13 +193,20 @@ export default function PassengerHomeScreen() {
   });
 
   const togglePanel = () => {
+    if (isLocked) return;
     if (translateY.value < SNAP_BOTTOM - 10) {
-      translateY.value = withSpring(SNAP_BOTTOM, { damping: 20, stiffness: 90 });
+      translateY.value = withTiming(SNAP_BOTTOM, { duration: 300 });
       setIsCollapsed(true);
     } else {
-      translateY.value = withSpring(SNAP_MID, { damping: 20, stiffness: 90 });
+      translateY.value = withTiming(SNAP_MID, { duration: 300 });
       setIsCollapsed(false);
     }
+  };
+
+  const unlockAndPullDown = () => {
+    setIsLocked(false);
+    translateY.value = withTiming(SNAP_MID, { duration: 300 });
+    setIsCollapsed(false);
   };
 
   const handleMapPress = (e: MapPressEvent) => {
@@ -467,7 +505,9 @@ export default function PassengerHomeScreen() {
               <FlatList
                 data={recentPlaces}
                 keyExtractor={(item) => item.id}
-                scrollEnabled={false}
+                scrollEnabled={true}
+                showsVerticalScrollIndicator={true}
+                style={{ maxHeight: isLocked ? SCREEN_HEIGHT - 260 : 220 }}
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={[styles.placeRow, dynamicStyles.placeRowBorder]}
@@ -494,6 +534,17 @@ export default function PassengerHomeScreen() {
             </View>
           </Animated.View>
         </GestureDetector>
+
+        {/* Pull Down FAB */}
+        {isLocked && (
+          <TouchableOpacity 
+            style={[styles.pullDownFab, { bottom: insets.bottom + 20 }]} 
+            onPress={unlockAndPullDown}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chevron-down" size={28} color={Colors.white} />
+          </TouchableOpacity>
+        )}
       </Animated.View>
     </GestureHandlerRootView>
   );
@@ -688,6 +739,18 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontWeight: FontWeight.bold,
     fontSize: FontSize.xs,
+  },
+  pullDownFab: {
+    position: 'absolute',
+    right: Spacing.lg,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.lg,
+    zIndex: 9999,
   },
 });
 

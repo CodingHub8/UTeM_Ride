@@ -235,3 +235,35 @@ function decodePolyline(encoded: string) {
   }
   return points;
 }
+
+const RECENT_PICKUPS_KEY = 'recent_pickups';
+
+export async function saveRecentPickup(pickup: { name: string, address: string, lat?: number, lng?: number, icon?: any }) {
+  try {
+    const stored = await AsyncStorage.getItem(RECENT_PICKUPS_KEY);
+    let places = stored ? JSON.parse(stored) : [];
+    
+    places = places.filter((p: any) => p.name !== pickup.name);
+    
+    places.unshift({
+      id: Date.now().toString(),
+      ...pickup,
+      icon: pickup.icon || 'location'
+    });
+    
+    places = places.slice(0, 8);
+    await AsyncStorage.setItem(RECENT_PICKUPS_KEY, JSON.stringify(places));
+  } catch (e) {
+    console.error('Error saving recent pickup:', e);
+  }
+}
+
+export async function getRecentPickups() {
+  try {
+    const stored = await AsyncStorage.getItem(RECENT_PICKUPS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch (e) {
+    console.error('Error getting recent pickups:', e);
+    return [];
+  }
+}

@@ -1,13 +1,18 @@
 import { BorderRadius, Colors, FontSize, FontWeight, Shadows, Spacing } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { encryptData } from '@/utils/encryption';
-import { saveRecentDestination } from '@/utils/location';
+import { saveRecentDestination, saveRecentPickup } from '@/utils/location';
+import { initiateFPXPayment, initiateCardPayment } from '@/utils/payment';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { db } from '@/utils/firebase';
+import { collection, addDoc } from 'firebase/firestore';
+import * as WebBrowser from 'expo-web-browser';
 
 // Default fallback coordinates
 const DEFAULT_PICKUP = { latitude: 2.3135, longitude: 102.3211 };
@@ -38,11 +43,13 @@ export default function RideRequestScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDark, theme } = useTheme();
+  const { user } = useAuth();
 
   // Payment states
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'fpx' | 'card'>('cash');
   const [paymentLabel, setPaymentLabel] = useState('Cash');
+  const [paymentLoading, setPaymentLoading] = useState(false);
 
   // FPX states
   const [selectedBank, setSelectedBank] = useState('');
@@ -220,11 +227,11 @@ export default function RideRequestScreen() {
           <View style={styles.routeInfo}>
             <View style={styles.routeStop}>
               <Text style={styles.routeLabel}>Pickup</Text>
-              <Text style={[styles.routeValue, dynamicStyles.text]} numberOfLines={1}>{pickupAddress || 'Current Location'}</Text>
+              <Text style={[styles.routeValue, dynamicStyles.text]}>{pickupAddress || 'Current Location'}</Text>
             </View>
             <View style={styles.routeStop}>
               <Text style={styles.routeLabel}>Destination</Text>
-              <Text style={[styles.routeValue, dynamicStyles.text]} numberOfLines={1}>{address || destination || 'UTeM Main Campus'}</Text>
+              <Text style={[styles.routeValue, dynamicStyles.text]}>{address || destination || 'UTeM Main Campus'}</Text>
             </View>
           </View>
         </View>
@@ -271,8 +278,47 @@ export default function RideRequestScreen() {
             <Text style={[styles.priceValue, isDark && { color: Colors.primaryLight }]}>{price || 'RM 5.50'}</Text>
           </View>
           <TouchableOpacity
-            style={styles.requestBtn}
+            style={[styles.requestBtn, paymentLoading && { opacity: 0.7 }]}
+            disabled={paymentLoading}
             onPress={async () => {
+              setPaymentLoading(true);
+              let txId = 'cash';
+
+              if (paymentMethod !== 'cash') {
+                try {
+                  const fareAmount = parseFloat(price ? price.replace(/[^\d.]/g, '') : '5.50') || 5.50;
+                  let paymentResult;
+
+                  if (paymentMethod === 'fpx') {
+                    paymentResult = await initiateFPXPayment(
+                      fareAmount,
+                      selectedBank || 'Maybank2u',
+                      user?.id || 'anonymous'
+                    );
+                  } else {
+                    paymentResult = await initiateCardPayment(
+                      fareAmount,
+                      { cardNumber, cardName, cardExpiry, cardCvv },
+                      user?.id || 'anonymous'
+                    );
+                  }
+
+                  if (paymentResult.success && paymentResult.paymentUrl) {
+                    // Open the hosted checkout page securely in the browser
+                    await WebBrowser.openBrowserAsync(paymentResult.paymentUrl);
+                    txId = paymentResult.transactionId;
+                  } else {
+                    Alert.alert('Payment Error', 'Failed to generate payment request session.');
+                    setPaymentLoading(false);
+                    return;
+                  }
+                } catch (err: any) {
+                  Alert.alert('Payment Failed', err.message || 'HitPay connection failed.');
+                  setPaymentLoading(false);
+                  return;
+                }
+              }
+
               // Save to recent destinations
               await saveRecentDestination({
                 name: address || destination || 'UTeM Main Campus',
@@ -281,6 +327,51 @@ export default function RideRequestScreen() {
                 lng: destCoord.longitude,
                 icon: 'time'
               });
+
+              // Save to recent pickups
+              if (pickupAddress) {
+                await saveRecentPickup({
+                  name: pickupAddress,
+                  address: pickupAddress,
+                  lat: pickupLat ? parseFloat(pickupLat) : undefined,
+                  lng: pickupLng ? parseFloat(pickupLng) : undefined,
+                  icon: 'location'
+                });
+              }
+
+              // Write booking document directly to Firestore 'rides' collection
+              try {
+                await addDoc(collection(db, 'rides'), {
+                  passenger_id: user?.id || 'anonymous',
+                  passenger_name: user?.name || 'Anonymous',
+                  pickup_address: pickupAddress || 'Current Location',
+                  pickup_coords: {
+                    latitude: pickupCoord.latitude,
+                    longitude: pickupCoord.longitude
+                  },
+                  destination_address: address || destination || 'UTeM Main Campus',
+                  destination_coords: {
+                    latitude: destCoord.latitude,
+                    longitude: destCoord.longitude
+                  },
+                  fare: price || 'RM 5.50',
+                  payment_method: paymentMethod,
+                  payment_label: paymentLabel,
+                  timestamp: Date.now(),
+                  status: paymentMethod === 'cash' ? 'completed' : 'pending_payment',
+                  route_polyline: routePoints,
+                  distance: distance || '8.2 km',
+                  duration: duration || '~15 min',
+                  driver_name: 'Ahmad Fauzi',
+                  driver_vehicle: 'Perodua Myvi (Silver)',
+                  driver_plate: 'MAB 1234',
+                  transactionId: txId
+                });
+              } catch (fsError) {
+                console.error('Error writing ride to Firestore:', fsError);
+              }
+
+              setPaymentLoading(false);
 
               router.push({
                 pathname: '/(passenger)/active-ride',
@@ -294,12 +385,17 @@ export default function RideRequestScreen() {
                   polyline,
                   paymentMethod,
                   paymentLabel,
-                  encryptedDetails: encryptedPaymentDetails || undefined
+                  encryptedDetails: encryptedPaymentDetails || undefined,
+                  transactionId: txId
                 }
               });
             }}
           >
-            <Text style={styles.requestText}>Request Ride</Text>
+            {paymentLoading ? (
+              <ActivityIndicator color={Colors.white} size="small" />
+            ) : (
+              <Text style={styles.requestText}>Request Ride</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
