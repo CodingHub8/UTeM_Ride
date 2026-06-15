@@ -1,24 +1,26 @@
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { PROVIDER_GOOGLE, Marker, Polyline } from 'react-native-maps';
+import { useEffect, useRef, useState } from 'react';
+import * as Location from 'expo-location';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/utils/firebase';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/utils/firebase';
+import {
+  publishDriverLocation,
+  startTrip,
+  completeTrip,
+  createRideTransactions,
+  parseFare,
+  COMMISSION_RATE,
+} from '@/utils/rides';
 
-// Mock coordinates for trip navigation
-const PICKUP_COORD = { latitude: 2.3135, longitude: 102.3211 };
-const DEST_COORD = { latitude: 2.2274, longitude: 102.2492 }; // Melaka Sentral
-
-const ROUTE_POINTS = [
-  PICKUP_COORD,
-  { latitude: 2.3000, longitude: 102.3000 },
-  { latitude: 2.2500, longitude: 102.2800 },
-  DEST_COORD,
-];
+const DEFAULT_PICKUP = { latitude: 2.3135, longitude: 102.3211 };
+const DEFAULT_DEST = { latitude: 2.2274, longitude: 102.2492 };
 
 const DARK_MAP_STYLE = [
   { "elementType": "geometry", "stylers": [{ "color": "#242f3e" }] },
@@ -46,17 +48,18 @@ export default function TripInProgressScreen() {
   const router = useRouter();
   const { isDark, theme } = useTheme();
   const { user } = useAuth();
+  const mapRef = useRef<MapView>(null);
 
-  const { 
-    rideId, 
-    price, 
-    pickup, 
-    destination, 
-    passengerName, 
-    passengerUsername, 
-    passengerEmail, 
-    passengerPhone, 
-    passengerGender 
+  const {
+    rideId,
+    price,
+    pickup,
+    destination,
+    passengerName,
+    passengerUsername,
+    passengerEmail,
+    passengerPhone,
+    passengerGender
   } = useLocalSearchParams<{
     rideId: string;
     price: string;
@@ -69,59 +72,159 @@ export default function TripInProgressScreen() {
     passengerGender: string;
   }>();
 
-  const fareValue = price ? parseFloat(price) : 12.50;
-  const commissionFee = fareValue * 0.10; // 10% App Owner Fee
-  const netEarnings = fareValue - commissionFee;
+  const fareValue = parseFare(price) || 0;
+  const commissionFee = +(fareValue * COMMISSION_RATE).toFixed(2);
+  const netEarnings = +(fareValue - commissionFee).toFixed(2);
+
+  const [pickupCoord, setPickupCoord] = useState(DEFAULT_PICKUP);
+  const [destCoord, setDestCoord] = useState(DEFAULT_DEST);
+  const [driverCoord, setDriverCoord] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [routePoly, setRoutePoly] = useState<{ latitude: number; longitude: number }[]>([]);
+  const [completing, setCompleting] = useState(false);
+  const [coordsReady, setCoordsReady] = useState(false);
+  const [hasFit, setHasFit] = useState(false);
+  const [passengerInfo, setPassengerInfo] = useState({
+    name: passengerName || 'Passenger',
+    username: passengerUsername || 'passenger',
+    email: passengerEmail || '',
+    phone: passengerPhone || '',
+    gender: passengerGender || '',
+  });
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [passengerId, setPassengerId] = useState('');
+
+  useEffect(() => {
+    if (!rideId) return;
+    const unsub = onSnapshot(doc(db, 'rides', rideId), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        let gotCoords = false;
+        if (data.pickup_coords) {
+          setPickupCoord({ latitude: data.pickup_coords.latitude, longitude: data.pickup_coords.longitude });
+          gotCoords = true;
+        }
+        if (data.destination_coords) {
+          setDestCoord({ latitude: data.destination_coords.latitude, longitude: data.destination_coords.longitude });
+          gotCoords = true;
+        }
+        if (Array.isArray(data.route_polyline)) {
+          setRoutePoly(data.route_polyline);
+        }
+        if (data.payment_method) setPaymentMethod(data.payment_method);
+        if (data.passenger_id) setPassengerId(data.passenger_id);
+        setPassengerInfo((prev) => ({
+          ...prev,
+          name: data.passenger_name || prev.name,
+          phone: data.passenger_phone || prev.phone,
+        }));
+        if (gotCoords) setCoordsReady(true);
+      }
+    });
+    return unsub;
+  }, [rideId]);
+
+  useEffect(() => {
+    if (hasFit) return;
+    if (driverCoord && coordsReady && mapRef.current) {
+      const points = [driverCoord, pickupCoord, destCoord];
+      mapRef.current.fitToCoordinates(points, {
+        edgePadding: { top: 80, right: 60, bottom: 240, left: 60 },
+        animated: true,
+      });
+      setHasFit(true);
+    }
+  }, [driverCoord, coordsReady, pickupCoord, destCoord, hasFit]);
+
+  useEffect(() => {
+    if (rideId) startTrip(rideId).catch((e) => console.warn('startTrip error:', e));
+  }, [rideId]);
+
+  useEffect(() => {
+    let sub: Location.LocationSubscription | null = null;
+    let mounted = true;
+
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+
+      try {
+        const initial = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        if (!mounted) return;
+        const c = { latitude: initial.coords.latitude, longitude: initial.coords.longitude };
+        setDriverCoord(c);
+        if (rideId) await publishDriverLocation(rideId, c, initial.coords.heading);
+      } catch (e) {
+        console.warn('Initial location error:', e);
+      }
+
+      sub = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 3000,
+          distanceInterval: 5,
+        },
+        async (loc) => {
+          if (!mounted) return;
+          const c = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+          setDriverCoord(c);
+          if (rideId) {
+            try {
+              await publishDriverLocation(rideId, c, loc.coords.heading);
+            } catch (err) {
+              console.warn('publishDriverLocation error:', err);
+            }
+          }
+        }
+      );
+    })();
+
+    return () => {
+      mounted = false;
+      if (sub) sub.remove();
+    };
+  }, [rideId]);
 
   const handleCompleteTrip = async () => {
     if (!user) {
       router.replace('/(driver)/home');
       return;
     }
-
+    setCompleting(true);
     try {
-      // 1. Log the full passenger trip earning transaction in Firestore
-      await addDoc(collection(db, 'transactions'), {
-        user_id: user.id,
-        ride_id: rideId || 'mock_ride_id',
-        amount: fareValue,
-        payment_method: 'fpx', // Defaulting to fpx/card
-        transaction_type: 'fare_payment',
-        label: `Trip payment from passenger`,
-        status: 'completed',
-        route: {
-          pickup: pickup || 'FTMK, UTeM Main Campus',
-          destination: destination || 'Melaka Sentral Bus Terminal',
-        },
-        passenger: {
-          name: passengerName || 'Muhammad Haziq',
-          username: passengerUsername || 'haziq_utem',
-          email: passengerEmail || 'b032110123@student.utem.edu.my',
-          phone: passengerPhone || '+6011-2345 6789',
-          gender: passengerGender || 'Male'
-        },
-        created_at: serverTimestamp()
-      });
+      if (rideId) await completeTrip(rideId);
+      if (rideId && passengerId && fareValue > 0) {
+        await createRideTransactions({
+          rideId,
+          fare: fareValue,
+          driver_id: user.id,
+          passenger_id: passengerId,
+          passenger_name: passengerInfo.name,
+          passenger_username: passengerInfo.username,
+          passenger_email: passengerInfo.email,
+          passenger_phone: passengerInfo.phone,
+          passenger_gender: passengerInfo.gender,
+          pickup: pickup || 'Pickup',
+          destination: destination || 'Destination',
+          payment_method: paymentMethod,
+        });
+      }
 
-      // 2. Log system commission fee deduction in Firestore (Option B)
-      await addDoc(collection(db, 'transactions'), {
-        user_id: user.id,
-        ride_id: rideId || 'mock_ride_id',
-        amount: -commissionFee,
-        payment_method: 'fpx',
-        transaction_type: 'service_fee',
-        label: `System commission fee (10%)`,
-        status: 'completed',
-        created_at: serverTimestamp()
-      });
-
-      Alert.alert('Trip Completed', `Fare: RM ${fareValue.toFixed(2)}\nFee (10%): -RM ${commissionFee.toFixed(2)}\nNet Earnings: RM ${netEarnings.toFixed(2)} credited to your wallet.`);
-      router.replace('/(driver)/home');
+      Alert.alert(
+        'Trip Completed',
+        `Fare: RM ${fareValue.toFixed(2)}\nCommission (10%): -RM ${commissionFee.toFixed(2)}\nNet Earnings: RM ${netEarnings.toFixed(2)}`,
+        [{ text: 'OK', onPress: () => router.replace('/(driver)/home') }]
+      );
     } catch (e: any) {
-      Alert.alert('Completion Error', 'Failed to log earnings. Returning to Home.');
+      Alert.alert('Completion Error', e.message || 'Failed to complete trip.');
       router.replace('/(driver)/home');
+    } finally {
+      setCompleting(false);
     }
   };
+
+  const polylinePoints = routePoly.length > 1
+    ? routePoly
+    : (driverCoord ? [pickupCoord, driverCoord, destCoord] : [pickupCoord, destCoord]);
 
   const accentColor = isDark ? Colors.primaryLight : Colors.primary;
 
@@ -136,45 +239,49 @@ export default function TripInProgressScreen() {
 
   return (
     <View style={[styles.container, dynamicStyles.container, { paddingTop: insets.top }]}>
-      {/* Map area */}
       <View style={styles.mapArea}>
         <MapView
+          ref={mapRef}
           key={isDark ? 'dark-map' : 'light-map'}
           style={styles.map}
           provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           initialRegion={{
-            latitude: (PICKUP_COORD.latitude + DEST_COORD.latitude) / 2,
-            longitude: (PICKUP_COORD.longitude + DEST_COORD.longitude) / 2,
-            latitudeDelta: 0.1,
-            longitudeDelta: 0.1,
+            latitude: (pickupCoord.latitude + destCoord.latitude) / 2,
+            longitude: (pickupCoord.longitude + destCoord.longitude) / 2,
+            latitudeDelta: Math.abs(pickupCoord.latitude - destCoord.latitude) * 2 || 0.1,
+            longitudeDelta: Math.abs(pickupCoord.longitude - destCoord.longitude) * 2 || 0.1,
           }}
           customMapStyle={isDark ? DARK_MAP_STYLE : []}
           userInterfaceStyle={theme}
+          showsUserLocation
         >
-          <Polyline
-            coordinates={ROUTE_POINTS}
-            strokeColor={accentColor}
-            strokeWidth={5}
-          />
+          {polylinePoints.length >= 2 && (
+            <Polyline
+              coordinates={polylinePoints}
+              strokeColor={accentColor}
+              strokeWidth={5}
+            />
+          )}
 
-          <Marker coordinate={PICKUP_COORD}>
+          <Marker coordinate={pickupCoord}>
             <View style={[styles.markerCircle, { backgroundColor: Colors.success }]}>
               <View style={styles.markerInner} />
             </View>
           </Marker>
 
-          <Marker coordinate={DEST_COORD}>
+          <Marker coordinate={destCoord}>
             <View style={[styles.markerCircle, { backgroundColor: Colors.error }]}>
               <Ionicons name="location" size={12} color={Colors.white} />
             </View>
           </Marker>
 
-          {/* Current Position Marker (Driver) */}
-          <Marker coordinate={ROUTE_POINTS[1]} flat anchor={{ x: 0.5, y: 0.5 }}>
-            <View style={[styles.driverMarker, { backgroundColor: accentColor }]}>
-              <Ionicons name="car" size={24} color={Colors.white} />
-            </View>
-          </Marker>
+          {driverCoord && (
+            <Marker coordinate={driverCoord} flat anchor={{ x: 0.5, y: 0.5 }}>
+              <View style={[styles.driverMarker, { backgroundColor: accentColor }]}>
+                <Ionicons name="car" size={24} color={Colors.white} />
+              </View>
+            </Marker>
+          )}
         </MapView>
 
         {/* Trip info badge */}
@@ -227,13 +334,19 @@ export default function TripInProgressScreen() {
 
         <View style={[styles.divider, dynamicStyles.divider]} />
 
-        {/* Complete button */}
         <TouchableOpacity
-          style={[styles.completeBtn, { backgroundColor: Colors.primary }]}
+          style={[styles.completeBtn, { backgroundColor: Colors.primary }, completing && { opacity: 0.7 }]}
           onPress={handleCompleteTrip}
+          disabled={completing}
         >
-          <Ionicons name="checkmark-done" size={22} color={Colors.white} />
-          <Text style={styles.completeText}>Complete Trip</Text>
+          {completing ? (
+            <ActivityIndicator color={Colors.white} />
+          ) : (
+            <>
+              <Ionicons name="checkmark-done" size={22} color={Colors.white} />
+              <Text style={styles.completeText}>Complete Trip</Text>
+            </>
+          )}
         </TouchableOpacity>
       </View>
     </View>

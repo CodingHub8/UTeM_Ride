@@ -54,6 +54,13 @@ module.exports = {
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#0057B8"
+        }
       ]
     ],
     experiments: {

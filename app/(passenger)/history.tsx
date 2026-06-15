@@ -186,11 +186,35 @@ export default function HistoryScreen() {
           badge: { backgroundColor: Colors.accent + '15' },
           text: { color: Colors.accent, label: 'Pending Payment' }
         };
+      case 'requested':
+        return {
+          badge: { backgroundColor: Colors.accent + '15' },
+          text: { color: Colors.accent, label: 'Finding Driver' }
+        };
+      case 'accepted':
+        return {
+          badge: { backgroundColor: Colors.primary + '15' },
+          text: { color: Colors.primary, label: 'Driver Assigned' }
+        };
+      case 'arrived':
+        return {
+          badge: { backgroundColor: Colors.primary + '15' },
+          text: { color: Colors.primary, label: 'Driver Arrived' }
+        };
+      case 'in_progress':
+        return {
+          badge: { backgroundColor: Colors.primary + '15' },
+          text: { color: Colors.primary, label: 'In Progress' }
+        };
       case 'cancelled':
-      default:
         return {
           badge: { backgroundColor: Colors.error + '15' },
           text: { color: Colors.error, label: 'Cancelled' }
+        };
+      default:
+        return {
+          badge: { backgroundColor: Colors.gray400 + '20' },
+          text: { color: Colors.gray500, label: 'Unknown' }
         };
     }
   };

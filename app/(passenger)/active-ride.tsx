@@ -2,11 +2,17 @@ import { BorderRadius, Colors, FontSize, FontWeight, Shadows, Spacing } from '@/
 import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '@/utils/firebase';
+import { useAuth } from '@/contexts/AuthContext';
+import { cancelRide } from '@/utils/rides';
 
-// Default fallback coordinates
+const ACTIVE_STATUSES = ['requested', 'accepted', 'arrived', 'in_progress'];
+
 const DEFAULT_PICKUP = { latitude: 2.3135, longitude: 102.3211 };
 const DEFAULT_DEST = { latitude: 2.3086, longitude: 102.3197 };
 
@@ -22,15 +28,19 @@ export default function ActiveRideScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDark, theme } = useTheme();
-  const { 
-    destination, 
-    pickupAddress, 
-    pickupLat, 
+  const { user } = useAuth();
+  const mapRef = useRef<MapView>(null);
+  const {
+    rideId,
+    destination,
+    pickupAddress,
+    pickupLat,
     pickupLng,
     distance,
     duration,
     polyline
   } = useLocalSearchParams<{
+    rideId?: string;
     destination: string;
     pickupAddress?: string;
     pickupLat?: string;
@@ -40,15 +50,13 @@ export default function ActiveRideScreen() {
     polyline?: string;
   }>();
 
-  const pickupCoord = pickupLat && pickupLng 
+  const pickupCoord = pickupLat && pickupLng
     ? { latitude: parseFloat(pickupLat), longitude: parseFloat(pickupLng) }
     : DEFAULT_PICKUP;
 
-  const destCoord = polyline 
+  const destCoord = polyline
     ? JSON.parse(polyline)[JSON.parse(polyline).length - 1]
     : DEFAULT_DEST;
-
-  const driverCoord = DEFAULT_PICKUP;
 
   const routePoints = polyline ? JSON.parse(polyline) : [
     pickupCoord,
@@ -57,6 +65,106 @@ export default function ActiveRideScreen() {
   ];
 
   const destinationName = destination || 'UTeM Main Campus';
+
+  const [ride, setRide] = useState<any>(null);
+  const [completed, setCompleted] = useState(false);
+
+  useEffect(() => {
+    if (rideId) {
+      const unsub = onSnapshot(doc(db, 'rides', rideId), (snap) => {
+        if (snap.exists()) {
+          setRide({ id: snap.id, ...snap.data() });
+        }
+      });
+      return unsub;
+    }
+
+    if (user?.id) {
+      const q = query(collection(db, 'rides'), where('passenger_id', '==', user.id));
+      const unsub = onSnapshot(q, (snap) => {
+        const active: any[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          if (ACTIVE_STATUSES.includes(data.status)) active.push({ id: d.id, ...data });
+        });
+        active.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        setRide(active[0] || null);
+      });
+      return unsub;
+    }
+  }, [rideId, user?.id]);
+
+  useEffect(() => {
+    if (!ride) return;
+    if (ride.status === 'arrived') {
+      Alert.alert('Driver Arrived', 'Your driver is at the pickup point.');
+    }
+    if (ride.status === 'completed' && !completed) {
+      setCompleted(true);
+      Alert.alert('Trip Completed', `Total: ${ride.fare}`, [
+        { text: 'OK', onPress: () => router.replace('/(passenger)/home') }
+      ]);
+    }
+    if (ride.status === 'cancelled') {
+      Alert.alert('Ride Cancelled', 'This ride was cancelled.', [
+        { text: 'OK', onPress: () => router.replace('/(passenger)/home') }
+      ]);
+    }
+  }, [ride?.status, completed]);
+
+  const driverLoc = ride?.driver_location;
+  const driverCoord = driverLoc
+    ? { latitude: driverLoc.latitude, longitude: driverLoc.longitude }
+    : pickupCoord;
+
+  useEffect(() => {
+    if (driverLoc && mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: driverLoc.latitude,
+        longitude: driverLoc.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      }, 600);
+    }
+  }, [driverLoc?.latitude, driverLoc?.longitude]);
+
+  const status: string = ride?.status || 'requested';
+  const driverAssigned = !!ride?.driver_id;
+
+  const statusLabel = (() => {
+    switch (status) {
+      case 'requested': return 'Looking for a driver...';
+      case 'accepted': return 'Driver is on the way';
+      case 'arrived': return 'Driver has arrived';
+      case 'in_progress': return 'Trip in progress';
+      case 'completed': return 'Trip completed';
+      case 'cancelled': return 'Ride cancelled';
+      default: return 'Active ride';
+    }
+  })();
+
+  const handleCancel = async () => {
+    const activeId = ride?.id || rideId;
+    if (!activeId) {
+      router.back();
+      return;
+    }
+    Alert.alert('Cancel Ride', 'Are you sure you want to cancel?', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await cancelRide(activeId);
+            router.replace('/(passenger)/home');
+          } catch (e: any) {
+            Alert.alert('Error', e.message || 'Failed to cancel ride.');
+          }
+        }
+      }
+    ]);
+  };
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? Colors.darkBg : Colors.gray100 },
@@ -72,6 +180,7 @@ export default function ActiveRideScreen() {
       {/* Map area */}
       <View style={styles.mapArea}>
         <MapView
+          ref={mapRef}
           key={isDark ? 'dark-map' : 'light-map'}
           style={styles.map}
           provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
@@ -102,33 +211,43 @@ export default function ActiveRideScreen() {
             </View>
           </Marker>
 
-          {/* Driver Marker */}
-          <Marker coordinate={driverCoord} flat anchor={{ x: 0.5, y: 0.5 }}>
-            <View style={styles.driverMarker}>
-              <Ionicons name="car" size={24} color={Colors.white} />
-            </View>
-          </Marker>
+          {driverAssigned && (
+            <Marker coordinate={driverCoord} flat anchor={{ x: 0.5, y: 0.5 }}>
+              <View style={styles.driverMarker}>
+                <Ionicons name="car" size={24} color={Colors.white} />
+              </View>
+            </Marker>
+          )}
         </MapView>
 
-        {/* ETA badge */}
         <View style={styles.etaBadge}>
-          <Ionicons name="time" size={18} color={Colors.white} />
-          <Text style={styles.etaText}>{duration || '3 min'} away</Text>
+          {status === 'requested' ? (
+            <ActivityIndicator size="small" color={Colors.white} />
+          ) : (
+            <Ionicons name="time" size={18} color={Colors.white} />
+          )}
+          <Text style={styles.etaText}>{statusLabel}</Text>
         </View>
       </View>
 
-      {/* Driver card */}
       <View style={[styles.card, dynamicStyles.card]}>
         <View style={styles.driverRow}>
           <View style={styles.avatar}>
             <Ionicons name="person" size={28} color={Colors.white} />
           </View>
           <View style={styles.driverInfo}>
-            <Text style={[styles.driverName, dynamicStyles.text]}>Your Driver</Text>
+            <Text style={[styles.driverName, dynamicStyles.text]}>
+              {ride?.driver_name || (driverAssigned ? 'Your Driver' : 'Searching...')}
+            </Text>
             <View style={styles.ratingRow}>
-              <Ionicons name="star" size={14} color={Colors.accent} />
-              <Text style={[styles.ratingText, dynamicStyles.text]}>--</Text>
-              <Text style={styles.tripCount}>· -- trips</Text>
+              {driverAssigned ? (
+                <>
+                  <Ionicons name="call" size={14} color={Colors.accent} />
+                  <Text style={[styles.ratingText, dynamicStyles.text]}>{ride?.driver_phone || '—'}</Text>
+                </>
+              ) : (
+                <Text style={styles.tripCount}>Waiting for a driver to accept</Text>
+              )}
             </View>
           </View>
           <View style={styles.actionBtns}>
@@ -141,22 +260,18 @@ export default function ActiveRideScreen() {
           </View>
         </View>
 
-        {/* Vehicle info */}
         <View style={[styles.vehicleRow, dynamicStyles.vehicleRow]}>
           <View style={styles.vehicleBadge}>
             <Text style={styles.vehicleIcon}>🚗</Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.vehicleName, dynamicStyles.text]}>--</Text>
-            <Text style={[styles.vehiclePlate, dynamicStyles.subText]}>--</Text>
+            <Text style={[styles.vehicleName, dynamicStyles.text]}>{ride?.driver_vehicle || 'Vehicle pending'}</Text>
+            <Text style={[styles.vehiclePlate, dynamicStyles.subText]}>{ride?.driver_plate || '—'}</Text>
           </View>
-          <View style={[styles.colorDot, isDark && { borderColor: Colors.darkBorder }]} />
-          <Text style={[styles.vehicleColor, dynamicStyles.subText]}>--</Text>
         </View>
 
         <View style={[styles.divider, dynamicStyles.divider]} />
 
-        {/* Route */}
         <View style={styles.routeRow}>
           <View style={[styles.routeMarkers, { paddingTop: 4 }]}>
             <View style={[styles.dot, { backgroundColor: Colors.success }]} />
@@ -177,9 +292,12 @@ export default function ActiveRideScreen() {
 
         <View style={[styles.divider, dynamicStyles.divider]} />
 
-        {/* Actions */}
         <View style={styles.bottomRow}>
-          <TouchableOpacity style={[styles.cancelBtn, isDark && { backgroundColor: Colors.gray900 }]} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={[styles.cancelBtn, isDark && { backgroundColor: Colors.gray900 }]}
+            onPress={handleCancel}
+            disabled={status === 'in_progress' || status === 'completed'}
+          >
             <Text style={[styles.cancelText, dynamicStyles.subText]}>Cancel Ride</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.sosBtn}>

@@ -15,10 +15,14 @@ import Animated, {
   interpolateColor,
   runOnJS 
 } from 'react-native-reanimated';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '@/utils/firebase';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getRecentDestinations, saveRecentDestination, getRecentPickups } from '@/utils/location';
+
+const ACTIVE_STATUSES = ['requested', 'accepted', 'arrived', 'in_progress'];
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('screen');
 const COLLAPSED_HEIGHT = 160; 
@@ -70,6 +74,39 @@ export default function PassengerHomeScreen() {
   const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
+  const [activeRide, setActiveRide] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const q = query(collection(db, 'rides'), where('passenger_id', '==', user.id));
+    const unsub = onSnapshot(q, (snap) => {
+      const active: any[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        if (ACTIVE_STATUSES.includes(data.status)) active.push({ id: d.id, ...data });
+      });
+      active.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      setActiveRide(active[0] || null);
+    }, (err) => console.warn('Active ride listener error:', err));
+    return unsub;
+  }, [user?.id]);
+
+  const resumeActiveRide = () => {
+    if (!activeRide) return;
+    router.push({
+      pathname: '/(passenger)/active-ride',
+      params: {
+        rideId: activeRide.id,
+        destination: activeRide.destination_address || '',
+        pickupAddress: activeRide.pickup_address || '',
+        pickupLat: activeRide.pickup_coords ? String(activeRide.pickup_coords.latitude) : undefined,
+        pickupLng: activeRide.pickup_coords ? String(activeRide.pickup_coords.longitude) : undefined,
+        distance: activeRide.distance || '',
+        duration: activeRide.duration || '',
+        polyline: activeRide.route_polyline ? JSON.stringify(activeRide.route_polyline) : undefined,
+      },
+    });
+  };
 
   const loadRecent = async () => {
     try {
@@ -367,9 +404,27 @@ export default function PassengerHomeScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Animated.View style={[styles.container, animatedContainerStyle]}>
+        {activeRide && (
+          <TouchableOpacity
+            style={[styles.activeRideBanner, { backgroundColor: Colors.primary, top: insets.top + 10 }]}
+            onPress={resumeActiveRide}
+            activeOpacity={0.9}
+          >
+            <View style={styles.verificationBannerLeft}>
+              <Ionicons name="car-sport" size={18} color={Colors.white} />
+              <Text style={styles.verificationBannerText}>
+                {activeRide.status === 'requested' ? 'Finding your driver — tap to view' :
+                 activeRide.status === 'accepted' ? 'Driver on the way — tap to track' :
+                 activeRide.status === 'arrived' ? 'Driver has arrived — tap to view' :
+                 'Trip in progress — tap to view'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={Colors.white} />
+          </TouchableOpacity>
+        )}
         {user && !user.is_2FA_verified && (
           <TouchableOpacity 
-            style={[styles.verificationBanner, { backgroundColor: Colors.warning, top: insets.top + 10 }]}
+            style={[styles.verificationBanner, { backgroundColor: Colors.warning, top: insets.top + 10 + (activeRide ? 56 : 0) }]}
             onPress={async () => {
               Alert.alert(
                 'Simulate 2FA Verification',
@@ -727,6 +782,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.md,
     zIndex: 100,
+    ...Shadows.md,
+  },
+  activeRideBanner: {
+    position: 'absolute',
+    left: Spacing.md,
+    right: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    zIndex: 101,
     ...Shadows.md,
   },
   verificationBannerLeft: {

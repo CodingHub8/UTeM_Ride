@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '@/utils/firebase';
+import { registerForPushNotifications, savePushToken } from '@/utils/notifications';
 
 
 export type UserRole = 'passenger' | 'driver';
@@ -63,6 +64,7 @@ interface AuthContextType {
   setRole: (role: UserRole) => void;
   verify2FA: () => Promise<void>;
   verifyAdminDocs: () => Promise<void>;
+  updateProfile: (updates: Record<string, any>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -131,6 +133,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 encryptedDocs: data.encryptedDocs,
               });
               setRole(data.role ?? 'passenger');
+
+              registerForPushNotifications().then((token) => {
+                if (token) savePushToken(studentId, token);
+              });
             }
           }
         } catch (err) {
@@ -338,9 +344,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
+  const updateProfile = useCallback(async (updates: Record<string, any>) => {
+    if (!user) return;
+    const userRef = doc(db, 'users', user.id);
+    await updateDoc(userRef, { ...updates, updated_at: serverTimestamp() });
+    setUser((prev) => (prev ? { ...prev, ...updates } : null));
+  }, [user]);
+
   const value = useMemo(
-    () => ({ user, isAuthenticated: !!user, loading, role, login, register, logout, switchRole, setRole, verify2FA, verifyAdminDocs }),
-    [user, loading, role, login, register, logout, switchRole, verify2FA, verifyAdminDocs],
+    () => ({ user, isAuthenticated: !!user, loading, role, login, register, logout, switchRole, setRole, verify2FA, verifyAdminDocs, updateProfile }),
+    [user, loading, role, login, register, logout, switchRole, verify2FA, verifyAdminDocs, updateProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

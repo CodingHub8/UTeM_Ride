@@ -10,8 +10,7 @@ import { useState } from 'react';
 import { Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { db } from '@/utils/firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import { createRide } from '@/utils/rides';
 import * as WebBrowser from 'expo-web-browser';
 
 // Default fallback coordinates
@@ -339,11 +338,12 @@ export default function RideRequestScreen() {
                 });
               }
 
-              // Write booking document directly to Firestore 'rides' collection
+              let rideId = '';
               try {
-                await addDoc(collection(db, 'rides'), {
+                rideId = await createRide({
                   passenger_id: user?.id || 'anonymous',
                   passenger_name: user?.name || 'Anonymous',
+                  passenger_phone: user?.phone || '',
                   pickup_address: pickupAddress || 'Current Location',
                   pickup_coords: {
                     latitude: pickupCoord.latitude,
@@ -355,20 +355,17 @@ export default function RideRequestScreen() {
                     longitude: destCoord.longitude
                   },
                   fare: price || 'RM 5.50',
+                  distance: distance || '',
+                  duration: duration || '',
+                  route_polyline: routePoints,
                   payment_method: paymentMethod,
                   payment_label: paymentLabel,
-                  timestamp: Date.now(),
-                  status: paymentMethod === 'cash' ? 'completed' : 'pending_payment',
-                  route_polyline: routePoints,
-                  distance: distance || '8.2 km',
-                  duration: duration || '~15 min',
-                  driver_name: 'Ahmad Fauzi',
-                  driver_vehicle: 'Perodua Myvi (Silver)',
-                  driver_plate: 'MAB 1234',
-                  transactionId: txId
                 });
-              } catch (fsError) {
+              } catch (fsError: any) {
                 console.error('Error writing ride to Firestore:', fsError);
+                Alert.alert('Booking Error', fsError.message || 'Failed to create ride.');
+                setPaymentLoading(false);
+                return;
               }
 
               setPaymentLoading(false);
@@ -376,6 +373,7 @@ export default function RideRequestScreen() {
               router.push({
                 pathname: '/(passenger)/active-ride',
                 params: {
+                  rideId,
                   destination: address || destination || 'UTeM Main Campus',
                   pickupAddress,
                   pickupLat,

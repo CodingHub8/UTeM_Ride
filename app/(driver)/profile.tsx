@@ -5,22 +5,40 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { performOCR } from '@/utils/ocr';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/utils/firebase';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '@/utils/firebase';
 
 interface VehicleDoc {
   id: string;
   uri: string;
   type: 'Road Tax' | 'Vehicle Ownership Certificate' | 'Other';
+  uploadedUrl?: string;
+}
+
+async function uploadDocAsync(uri: string, path: string): Promise<string> {
+  if (!uri) return '';
+  if (uri.startsWith('http://') || uri.startsWith('https://')) return uri;
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = () => resolve(xhr.response);
+    xhr.onerror = (e) => reject(e);
+    xhr.responseType = 'blob';
+    xhr.open('GET', uri, true);
+    xhr.send(null);
+  });
+  const fileRef = storageRef(storage, path);
+  await uploadBytes(fileRef, blob);
+  return await getDownloadURL(fileRef);
 }
 
 export default function DriverProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, logout, switchRole, verifyAdminDocs } = useAuth();
+  const { user, logout, switchRole, verifyAdminDocs, updateProfile } = useAuth();
   const { themeMode, setTheme, isDark } = useTheme();
 
   // Modal State
@@ -31,6 +49,29 @@ export default function DriverProfileScreen() {
   const [vehicleColor, setVehicleColor] = useState(user?.vehicleColor || '');
   const [roadTaxExpiry, setRoadTaxExpiry] = useState('');
   const [loadingOCR, setLoadingOCR] = useState(false);
+  const [savingVehicle, setSavingVehicle] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'user_documents', user.id));
+        if (!snap.exists()) return;
+        const data = snap.data();
+        const saved = Array.isArray(data?.vehicle_documents) ? data.vehicle_documents : [];
+        const mapped: VehicleDoc[] = saved
+          .filter((d: any) => d?.url)
+          .map((d: any, i: number) => ({
+            id: `saved_${i}_${d.uploaded_at || ''}`,
+            uri: d.url,
+            type: (d.type as VehicleDoc['type']) || 'Other',
+            uploadedUrl: d.url,
+          }));
+        setVehicleDocs(mapped);
+        if (data?.road_tax_expiry) setRoadTaxExpiry(data.road_tax_expiry);
+      } catch {}
+    })();
+  }, [user?.id]);
 
   const openUpdateModal = () => {
     setPlateNumber(user?.vehiclePlate || '');
@@ -118,19 +159,60 @@ export default function DriverProfileScreen() {
 
   const handleSaveVehicle = async () => {
     if (!user) return;
+    setSavingVehicle(true);
     try {
-      const userRef = doc(db, 'users', user.id);
-      await updateDoc(userRef, {
+      const uploadedDocs: { type: string; url: string; uploaded_at: number }[] = [];
+      for (const d of vehicleDocs) {
+        if (d.uploadedUrl) {
+          uploadedDocs.push({ type: d.type, url: d.uploadedUrl, uploaded_at: Date.now() });
+          continue;
+        }
+        try {
+          const safeType = d.type.replace(/\s+/g, '_').toLowerCase();
+          const ownerKey = user.firebaseUid || user.id;
+          const path = `documents/${ownerKey}/${safeType}_${d.id}.jpg`;
+          const url = await uploadDocAsync(d.uri, path);
+          uploadedDocs.push({ type: d.type, url, uploaded_at: Date.now() });
+          d.uploadedUrl = url;
+        } catch (uploadErr: any) {
+          console.warn('Doc upload failed:', uploadErr?.message);
+          Alert.alert('Upload Issue', `Could not upload ${d.type}. ${uploadErr?.message || ''}`);
+        }
+      }
+
+      await updateProfile({
         vehiclePlate: plateNumber,
         vehicleModel: vehicleModel,
         vehicleColor: vehicleColor,
-        updated_at: serverTimestamp(),
+        road_tax_expiry: roadTaxExpiry || null,
       });
-      
-      Alert.alert('Vehicle Updated', 'Your vehicle information has been updated successfully. Please restart or switch roles to refresh dashboard text.');
+
+      const docsRef = doc(db, 'user_documents', user.id);
+      await setDoc(
+        docsRef,
+        {
+          user_id: user.id,
+          vehicle_documents: uploadedDocs,
+          plate_number: plateNumber,
+          vehicle_model: vehicleModel,
+          vehicle_color: vehicleColor,
+          road_tax_expiry: roadTaxExpiry || null,
+          updated_at: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      Alert.alert(
+        'Saved',
+        uploadedDocs.length > 0
+          ? `Vehicle updated and ${uploadedDocs.length} document(s) uploaded.`
+          : 'Vehicle information saved.'
+      );
       setModalVisible(false);
     } catch (err: any) {
-      Alert.alert('Error', 'Failed to update vehicle details: ' + err.message);
+      Alert.alert('Error', 'Failed to update vehicle details: ' + (err?.message || ''));
+    } finally {
+      setSavingVehicle(false);
     }
   };
 
@@ -277,7 +359,7 @@ export default function DriverProfileScreen() {
                   <Image source={{ uri: doc.uri }} style={styles.docListThumbnail} />
                   <View style={{ flex: 1, marginLeft: Spacing.sm }}>
                     <Text style={[styles.docListType, dynamicStyles.text]}>{doc.type}</Text>
-                    <Text style={[styles.docListSub, dynamicStyles.subText]}>Document uploaded</Text>
+                    <Text style={[styles.docListSub, dynamicStyles.subText]}>{doc.uploadedUrl ? 'Saved' : 'Ready to upload'}</Text>
                   </View>
                   <TouchableOpacity onPress={() => removeVehicleDoc(doc.id)} style={styles.docDeleteBtn}>
                     <Ionicons name="trash-outline" size={20} color={Colors.error} />
@@ -348,9 +430,16 @@ export default function DriverProfileScreen() {
                 </View>
               </View>
 
-              {/* Action Buttons */}
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveVehicle}>
-                <Text style={styles.saveBtnText}>Save specifications</Text>
+              <TouchableOpacity
+                style={[styles.saveBtn, savingVehicle && { opacity: 0.7 }]}
+                onPress={handleSaveVehicle}
+                disabled={savingVehicle}
+              >
+                {savingVehicle ? (
+                  <ActivityIndicator color={Colors.white} />
+                ) : (
+                  <Text style={styles.saveBtnText}>Save specifications & upload</Text>
+                )}
               </TouchableOpacity>
 
             </ScrollView>

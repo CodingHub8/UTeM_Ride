@@ -1,21 +1,17 @@
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { PROVIDER_GOOGLE, Marker, Polyline } from 'react-native-maps';
+import { useEffect, useRef, useState } from 'react';
+import * as Location from 'expo-location';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/utils/firebase';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
+import { markArrived, publishDriverLocation, cancelRide } from '@/utils/rides';
 
-// Mock coordinates for navigation to pickup
-const DRIVER_COORD = { latitude: 2.3165, longitude: 102.3245 };
-const PICKUP_COORD = { latitude: 2.3135, longitude: 102.3211 };
-
-const ROUTE_POINTS = [
-  DRIVER_COORD,
-  { latitude: 2.3155, longitude: 102.3235 },
-  { latitude: 2.3145, longitude: 102.3225 },
-  PICKUP_COORD,
-];
+const DEFAULT_PICKUP = { latitude: 2.3135, longitude: 102.3211 };
 
 const DARK_MAP_STYLE = [
   { "elementType": "geometry", "stylers": [{ "color": "#242f3e" }] },
@@ -42,17 +38,18 @@ export default function ActivePickupScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDark, theme } = useTheme();
+  const mapRef = useRef<MapView>(null);
 
-  const { 
-    rideId, 
-    price, 
-    pickup, 
-    destination, 
-    passengerName, 
-    passengerUsername, 
-    passengerEmail, 
-    passengerPhone, 
-    passengerGender 
+  const {
+    rideId,
+    price,
+    pickup,
+    destination,
+    passengerName,
+    passengerUsername,
+    passengerEmail,
+    passengerPhone,
+    passengerGender
   } = useLocalSearchParams<{
     rideId: string;
     price: string;
@@ -65,21 +62,135 @@ export default function ActivePickupScreen() {
     passengerGender: string;
   }>();
 
-  const handleArrived = () => {
-    router.push({
-      pathname: '/(driver)/trip-in-progress',
-      params: { 
-        rideId, 
-        price, 
-        pickup, 
-        destination, 
-        passengerName, 
-        passengerUsername, 
-        passengerEmail, 
-        passengerPhone, 
-        passengerGender 
+  const [driverCoord, setDriverCoord] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [pickupCoord, setPickupCoord] = useState(DEFAULT_PICKUP);
+  const [pickupReady, setPickupReady] = useState(false);
+  const [arriving, setArriving] = useState(false);
+  const [hasFit, setHasFit] = useState(false);
+
+  useEffect(() => {
+    if (!rideId) return;
+    const unsub = onSnapshot(doc(db, 'rides', rideId), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.pickup_coords) {
+          setPickupCoord({
+            latitude: data.pickup_coords.latitude,
+            longitude: data.pickup_coords.longitude
+          });
+          setPickupReady(true);
+        }
       }
     });
+    return unsub;
+  }, [rideId]);
+
+  useEffect(() => {
+    if (hasFit) return;
+    if (driverCoord && pickupReady && mapRef.current) {
+      mapRef.current.fitToCoordinates([driverCoord, pickupCoord], {
+        edgePadding: { top: 80, right: 60, bottom: 220, left: 60 },
+        animated: true,
+      });
+      setHasFit(true);
+    }
+  }, [driverCoord, pickupReady, pickupCoord, hasFit]);
+
+  useEffect(() => {
+    let sub: Location.LocationSubscription | null = null;
+    let mounted = true;
+
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Location Required', 'Enable location to share your live position with the passenger.');
+        return;
+      }
+
+      try {
+        const initial = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        if (!mounted) return;
+        const c = { latitude: initial.coords.latitude, longitude: initial.coords.longitude };
+        setDriverCoord(c);
+        if (rideId) await publishDriverLocation(rideId, c, initial.coords.heading);
+      } catch (e) {
+        console.warn('Initial location error:', e);
+      }
+
+      sub = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 3000,
+          distanceInterval: 5,
+        },
+        async (loc) => {
+          if (!mounted) return;
+          const c = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+          setDriverCoord(c);
+          if (rideId) {
+            try {
+              await publishDriverLocation(rideId, c, loc.coords.heading);
+            } catch (err) {
+              console.warn('publishDriverLocation error:', err);
+            }
+          }
+        }
+      );
+    })();
+
+    return () => {
+      mounted = false;
+      if (sub) sub.remove();
+    };
+  }, [rideId]);
+
+  const routePoints = driverCoord ? [driverCoord, pickupCoord] : [pickupCoord];
+
+  const handleArrived = async () => {
+    if (!rideId) {
+      router.back();
+      return;
+    }
+    setArriving(true);
+    try {
+      await markArrived(rideId);
+      router.replace({
+        pathname: '/(driver)/trip-in-progress',
+        params: {
+          rideId,
+          price,
+          pickup,
+          destination,
+          passengerName,
+          passengerUsername,
+          passengerEmail,
+          passengerPhone,
+          passengerGender,
+        }
+      });
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Could not update arrival status.');
+    } finally {
+      setArriving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    Alert.alert('Cancel Pickup', 'Are you sure you want to cancel this ride?', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            if (rideId) await cancelRide(rideId);
+            router.replace('/(driver)/home');
+          } catch (e: any) {
+            Alert.alert('Error', e.message || 'Failed to cancel.');
+          }
+        }
+      }
+    ]);
   };
 
   const dynamicStyles = {
@@ -97,46 +208,54 @@ export default function ActivePickupScreen() {
 
   return (
     <View style={[styles.container, dynamicStyles.container, { paddingTop: insets.top }]}>
-      {/* Map area */}
       <View style={styles.mapArea}>
         <MapView
+          ref={mapRef}
           key={isDark ? 'dark-map' : 'light-map'}
           style={styles.map}
           provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           initialRegion={{
-            latitude: (DRIVER_COORD.latitude + PICKUP_COORD.latitude) / 2,
-            longitude: (DRIVER_COORD.longitude + PICKUP_COORD.longitude) / 2,
+            latitude: pickupCoord.latitude,
+            longitude: pickupCoord.longitude,
             latitudeDelta: 0.015,
             longitudeDelta: 0.015,
           }}
           customMapStyle={isDark ? DARK_MAP_STYLE : []}
           userInterfaceStyle={theme}
+          showsUserLocation
         >
-          <Polyline
-            coordinates={ROUTE_POINTS}
-            strokeColor={Colors.primary}
-            strokeWidth={5}
-          />
+          {routePoints.length >= 2 && (
+            <Polyline
+              coordinates={routePoints}
+              strokeColor={Colors.primary}
+              strokeWidth={5}
+            />
+          )}
 
-          {/* Pickup Marker */}
-          <Marker coordinate={PICKUP_COORD}>
+          <Marker coordinate={pickupCoord}>
             <View style={[styles.markerCircle, { backgroundColor: Colors.success }]}>
               <View style={styles.markerInner} />
             </View>
           </Marker>
 
-          {/* Driver Marker */}
-          <Marker coordinate={DRIVER_COORD} flat anchor={{ x: 0.5, y: 0.5 }}>
-            <View style={styles.driverMarker}>
-              <Ionicons name="car" size={24} color={Colors.white} />
-            </View>
-          </Marker>
+          {driverCoord && (
+            <Marker coordinate={driverCoord} flat anchor={{ x: 0.5, y: 0.5 }}>
+              <View style={styles.driverMarker}>
+                <Ionicons name="car" size={24} color={Colors.white} />
+              </View>
+            </Marker>
+          )}
         </MapView>
 
-        {/* ETA badge */}
         <View style={styles.etaBadge}>
-          <Ionicons name="time" size={16} color={Colors.white} />
-          <Text style={styles.etaText}>3 min · 2.3 km</Text>
+          {driverCoord ? (
+            <Ionicons name="navigate" size={16} color={Colors.white} />
+          ) : (
+            <ActivityIndicator size="small" color={Colors.white} />
+          )}
+          <Text style={styles.etaText}>
+            {driverCoord ? 'Live tracking active' : 'Acquiring GPS...'}
+          </Text>
         </View>
       </View>
 
@@ -163,17 +282,23 @@ export default function ActivePickupScreen() {
 
         <View style={[styles.divider, dynamicStyles.divider]} />
 
-        {/* Actions */}
         <View style={styles.actionRow}>
-          <TouchableOpacity style={[styles.cancelBtn, dynamicStyles.cancelBtn]} onPress={() => router.back()}>
+          <TouchableOpacity style={[styles.cancelBtn, dynamicStyles.cancelBtn]} onPress={handleCancel} disabled={arriving}>
             <Text style={[styles.cancelText, dynamicStyles.cancelText]}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.arrivedBtn}
+            style={[styles.arrivedBtn, arriving && { opacity: 0.7 }]}
             onPress={handleArrived}
+            disabled={arriving}
           >
-            <Ionicons name="checkmark-circle" size={22} color={Colors.white} />
-            <Text style={styles.arrivedText}>{"I've Arrived"}</Text>
+            {arriving ? (
+              <ActivityIndicator color={Colors.white} />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={22} color={Colors.white} />
+                <Text style={styles.arrivedText}>{"I've Arrived"}</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </View>

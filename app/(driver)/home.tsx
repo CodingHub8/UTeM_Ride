@@ -1,9 +1,12 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Switch, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Location from 'expo-location';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '@/utils/firebase';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -43,10 +46,119 @@ export default function DriverHomeScreen() {
   const { user, verify2FA } = useAuth();
   const { isDark, theme } = useTheme();
   const [isOnline, setIsOnline] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [activeRide, setActiveRide] = useState<any | null>(null);
   const mapRef = useRef<MapView>(null);
 
-  const handleLocateMe = () => {
-    mapRef.current?.animateToRegion(UTEM_REGION, 800);
+  useEffect(() => {
+    if (!user?.id) return;
+    const q = query(collection(db, 'rides'), where('driver_id', '==', user.id));
+    const unsub = onSnapshot(q, (snap) => {
+      const active: any[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        if (['accepted', 'arrived', 'in_progress'].includes(data.status)) {
+          active.push({ id: d.id, ...data });
+        }
+      });
+      active.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      setActiveRide(active[0] || null);
+    }, (err) => console.warn('Driver active ride listener error:', err));
+    return unsub;
+  }, [user?.id]);
+
+  const resumeActiveRide = () => {
+    if (!activeRide) return;
+    const params = {
+      rideId: activeRide.id,
+      price: activeRide.fare || '',
+      pickup: activeRide.pickup_address || '',
+      destination: activeRide.destination_address || '',
+      passengerName: activeRide.passenger_name || 'Passenger',
+      passengerUsername: (activeRide.passenger_name || 'passenger').toLowerCase().replace(/\s+/g, '_'),
+      passengerEmail: '',
+      passengerPhone: activeRide.passenger_phone || '',
+      passengerGender: '',
+    };
+    if (activeRide.status === 'in_progress') {
+      router.push({ pathname: '/(driver)/trip-in-progress', params });
+    } else {
+      router.push({ pathname: '/(driver)/active-pickup', params });
+    }
+  };
+
+  useEffect(() => {
+    if (!isOnline) {
+      setPendingCount(0);
+      return;
+    }
+    const q = query(
+      collection(db, 'rides'),
+      where('status', '==', 'requested'),
+      where('driver_id', '==', null)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      setPendingCount(snap.size);
+    }, (err) => {
+      console.error('Driver home pending listener error:', err);
+    });
+    return unsub;
+  }, [isOnline]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const c = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+        setUserLocation(c);
+        mapRef.current?.animateToRegion({
+          latitude: c.latitude,
+          longitude: c.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }, 800);
+      } catch (e) {
+        console.warn('Driver home location error:', e);
+      }
+    })();
+  }, []);
+
+  const handleLocateMe = async () => {
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        const req = await Location.requestForegroundPermissionsAsync();
+        if (req.status !== 'granted') {
+          Alert.alert('Location Required', 'Enable location access to use this feature.');
+          return;
+        }
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const c = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      setUserLocation(c);
+      mapRef.current?.animateToRegion({
+        latitude: c.latitude,
+        longitude: c.longitude,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      }, 800);
+    } catch (e) {
+      console.warn('Locate me error:', e);
+      const last = await Location.getLastKnownPositionAsync({});
+      if (last) {
+        mapRef.current?.animateToRegion({
+          latitude: last.coords.latitude,
+          longitude: last.coords.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }, 800);
+      } else {
+        mapRef.current?.animateToRegion(UTEM_REGION, 800);
+      }
+    }
   };
 
   const handleToggleOnline = (value: boolean) => {
@@ -106,10 +218,27 @@ export default function DriverHomeScreen() {
 
   return (
     <View style={[styles.container, dynamicStyles.container, { paddingTop: insets.top }]}>
+      {activeRide && (
+        <TouchableOpacity
+          style={[styles.verificationBanner, { backgroundColor: Colors.primary, top: insets.top + 10, zIndex: 101 }]}
+          onPress={resumeActiveRide}
+          activeOpacity={0.9}
+        >
+          <View style={styles.verificationBannerLeft}>
+            <Ionicons name="car-sport" size={18} color={Colors.white} />
+            <Text style={styles.verificationBannerText}>
+              {activeRide.status === 'in_progress' ? 'Trip in progress — tap to resume' :
+               activeRide.status === 'arrived' ? 'You marked arrived — tap to resume' :
+               'Active pickup — tap to resume'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={Colors.white} />
+        </TouchableOpacity>
+      )}
       {/* 2FA Banner */}
       {user && !user.is_2FA_verified && (
         <TouchableOpacity 
-          style={[styles.verificationBanner, { backgroundColor: Colors.warning, top: insets.top + 10 }]}
+          style={[styles.verificationBanner, { backgroundColor: Colors.warning, top: insets.top + 10 + (activeRide ? 56 : 0) }]}
           onPress={async () => {
             Alert.alert(
               'Simulate 2FA Verification',
@@ -223,8 +352,12 @@ export default function DriverHomeScreen() {
               <Ionicons name="notifications" size={24} color={Colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.requestTitle}>New ride requests</Text>
-              <Text style={styles.requestSub}>Tap to view incoming requests</Text>
+              <Text style={styles.requestTitle}>
+                {pendingCount > 0 ? `${pendingCount} new ride request${pendingCount > 1 ? 's' : ''}` : 'Waiting for requests'}
+              </Text>
+              <Text style={styles.requestSub}>
+                {pendingCount > 0 ? 'Tap to view and accept' : 'Live ride feed enabled'}
+              </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={Colors.gray500} />
           </TouchableOpacity>
