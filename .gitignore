@@ -53,3 +53,6 @@ admin/env-config.js
 .firebase/
 hosting/
 
+# Large binary files (APK exceeds GitHub 100MB limit)
+*.apk
+
