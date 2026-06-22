@@ -701,6 +701,61 @@ body {
   to { transform: translateY(0); opacity: 1; }
 }
 
+/* Analytics charts */
+.analytics-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card.compact {
+  padding: 16px 18px;
+}
+
+.stat-card.compact .stat-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.stat-card.compact .stat-number {
+  font-size: 24px;
+}
+
+.analytics-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.analytics-charts-grid .full-width {
+  grid-column: 1 / -1;
+}
+
+.chart-card .chart-wrap {
+  padding: 16px 20px 24px;
+  position: relative;
+  height: 280px;
+}
+
+.chart-card .chart-wrap-doughnut {
+  height: 260px;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.analytics-tables-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 900px) {
+  .analytics-charts-grid,
+  .analytics-tables-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Login Screen Overlay */
 .login-overlay {
   position: fixed;

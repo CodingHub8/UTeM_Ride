@@ -6,13 +6,15 @@ import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useState } from 'react';
+import TwoFactorModal from '@/components/TwoFactorModal';
 
 export default function PassengerProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, logout, switchRole } = useAuth();
+  const { user, logout, switchRole, refreshProfile } = useAuth();
   const { themeMode, setTheme, isDark, colors } = useTheme();
   const [notifications, setNotifications] = useState(true);
+  const [show2FA, setShow2FA] = useState(false);
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? Colors.darkBg : Colors.gray50 },
@@ -47,6 +49,14 @@ export default function PassengerProfileScreen() {
       </View>
 
       {/* Payment */}
+      <Text style={styles.sectionTitle}>Payment</Text>
+      <View style={[styles.card, dynamicStyles.card]}>
+        <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/(passenger)/payment-history' as never)}>
+          <Ionicons name="receipt-outline" size={20} color={Colors.primary} />
+          <Text style={styles.addBtnText}>Payment History & Receipts</Text>
+        </TouchableOpacity>
+      </View>
+
       <Text style={styles.sectionTitle}>Payment Methods</Text>
       <View style={[styles.card, dynamicStyles.card]}>
         <ProfileRow icon="wallet-outline" label="Cash" value="Default" isDark={isDark} />
@@ -61,6 +71,20 @@ export default function PassengerProfileScreen() {
       <View style={[styles.card, dynamicStyles.card]}>
         <ProfileRow icon="home-outline" label="Home" value="Not set" isDark={isDark} />
         <ProfileRow icon="business-outline" label="Campus" value="UTeM Main Campus" isDark={isDark} last />
+      </View>
+
+      {/* Security */}
+      <Text style={styles.sectionTitle}>Security</Text>
+      <View style={[styles.card, dynamicStyles.card]}>
+        <TouchableOpacity style={[styles.settingRow, dynamicStyles.border]} onPress={() => setShow2FA(true)}>
+          <View style={styles.settingLeft}>
+            <Ionicons name="shield-checkmark-outline" size={20} color={user?.is_2FA_verified ? Colors.success : Colors.warning} />
+            <Text style={[styles.settingLabel, dynamicStyles.text]}>Two-Factor Authentication</Text>
+          </View>
+          <Text style={{ color: user?.is_2FA_verified ? Colors.success : Colors.warning, fontWeight: FontWeight.semibold, fontSize: FontSize.sm }}>
+            {user?.is_2FA_verified ? 'Verified' : 'Verify now'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Settings */}
@@ -117,6 +141,17 @@ export default function PassengerProfileScreen() {
         <Ionicons name="log-out-outline" size={20} color={Colors.error} />
         <Text style={styles.logoutText}>Log Out</Text>
       </TouchableOpacity>
+
+      {user && (
+        <TwoFactorModal
+          visible={show2FA}
+          onClose={() => setShow2FA(false)}
+          userId={user.id}
+          email={user.email}
+          onVerified={refreshProfile}
+          isDark={isDark}
+        />
+      )}
     </ScrollView>
   );
 }

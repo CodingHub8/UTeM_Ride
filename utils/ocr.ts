@@ -142,11 +142,20 @@ function parseOCRLines(lines: string[], type: 'matric_card' | 'road_tax'): OCRRe
       data.studentId = idMatch[0].toUpperCase();
     }
 
-    // Try to find a line that starts with "NAMA" or "NAME" and take the text after it
-    const nameLabelMatch = lines.find(line => /^NAMA\s*[:.]*\s*/i.test(line.trim()));
-    if (nameLabelMatch) {
-      // Extract text after "Nama" label (strip the label and any colons/dots/spaces)
-      const extractedName = nameLabelMatch.replace(/^NAMA\s*[:.]*\s*/i, '').trim();
+    // Try to find a line that starts with NAMA, NAME, or NAMA / NAME, etc.
+    const nameLabelIdx = lines.findIndex(line => /^(NAMA|NAME)(\s*[\/\-]\s*(NAMA|NAME))?\s*[:.-]*\s*/i.test(line.trim()));
+    if (nameLabelIdx !== -1) {
+      const line = lines[nameLabelIdx];
+      let extractedName = line.replace(/^(NAMA|NAME)(\s*[\/\-]\s*(NAMA|NAME))?\s*[:.-]*\s*/i, '').trim();
+      
+      // If the label line is empty or just has colons/spaces, try the next line (ensuring it has no digits)
+      if (extractedName.length <= 2 && nameLabelIdx + 1 < lines.length) {
+        const nextLine = lines[nameLabelIdx + 1].trim();
+        if (!/\d/.test(nextLine)) {
+          extractedName = nextLine;
+        }
+      }
+      
       if (extractedName.length > 2) {
         data.name = toTitleCase(extractedName);
       }
@@ -157,7 +166,7 @@ function parseOCRLines(lines: string[], type: 'matric_card' | 'road_tax'): OCRRe
       const excludeKeywords = [
         'STUDENT', 'STAFF', 'UNIVERSITI', 'TEKNIKAL', 'MALAYSIA', 'MELAKA',
         'UTEM', 'FACULTY', 'FTMK', 'FKE', 'FKP', 'KEMENTERIAN', 'PENDIDIKAN',
-        'TINGGI', 'NO', 'ID', 'MATRIC', 'NAMA', 'TARIKH', 'SAH', 'HINGGA',
+        'TINGGI', 'NO', 'ID', 'MATRIC', 'TARIKH', 'SAH', 'HINGGA',
         'ALAMAT', 'JANTINA', 'BANGSA', 'WARGANEGARA', 'DIPLOMA', 'IJAZAH',
         'SARJANA', 'PHD', 'DOKTOR', 'FAKULTI', 'PUSAT', 'INSTITUT', 'MYSISWA',
         'MYDEBIT', 'ISLAMIC', 'KURSUS', 'MATRIK', 'RHB', 'VISA', 'DEBIT', ':'

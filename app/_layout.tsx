@@ -1,3 +1,4 @@
+import 'react-native-get-random-values';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -37,6 +38,7 @@ function MainLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(passenger)" />
         <Stack.Screen name="(driver)" />
+        <Stack.Screen name="payment-complete" options={{ headerShown: false, presentation: 'modal' }} />
       </Stack>
     </Animated.View>
   );

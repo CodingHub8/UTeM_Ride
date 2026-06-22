@@ -29,86 +29,9 @@ export default function HistoryScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedRide, setSelectedRide] = useState<any | null>(null);
 
-  // Load simulated/mock entries for fallback or immediate preview
-  const getMockRides = () => {
-    return [
-      {
-        id: 'mock_trip_01',
-        passenger_id: user?.id || 'passenger_1',
-        passenger_name: user?.name || 'Muhammad Hazim',
-        pickup_address: 'Kolej Kediaman Lestari, UTeM Main Campus',
-        pickup_coords: { latitude: 2.3135, longitude: 102.3211 },
-        destination_address: 'Fakulti Teknologi Maklumat dan Komunikasi (FTMK), UTeM',
-        destination_coords: { latitude: 2.3086, longitude: 102.3197 },
-        fare: 'RM 6.50',
-        payment_method: 'fpx',
-        payment_label: 'FPX (Maybank2u)',
-        timestamp: Date.now() - 3600000 * 2, // 2 hours ago
-        status: 'completed',
-        route_polyline: [
-          { latitude: 2.3135, longitude: 102.3211 },
-          { latitude: 2.3110, longitude: 102.3204 },
-          { latitude: 2.3086, longitude: 102.3197 }
-        ],
-        distance: '2.4 km',
-        duration: '6 min',
-        driver_name: 'Ahmad Fauzi',
-        driver_vehicle: 'Perodua Myvi (Silver)',
-        driver_plate: 'MAB 1234'
-      },
-      {
-        id: 'mock_trip_02',
-        passenger_id: user?.id || 'passenger_1',
-        passenger_name: user?.name || 'Muhammad Hazim',
-        pickup_address: 'Kolej Kediaman Lestari, UTeM Main Campus',
-        pickup_coords: { latitude: 2.3135, longitude: 102.3211 },
-        destination_address: 'Mydin MITC, Ayer Keroh, Melaka',
-        destination_coords: { latitude: 2.2714, longitude: 102.2858 },
-        fare: 'RM 14.80',
-        payment_method: 'card',
-        payment_label: 'Card (*5678)',
-        timestamp: Date.now() - 3600000 * 24, // 1 day ago
-        status: 'pending_payment',
-        route_polyline: [
-          { latitude: 2.3135, longitude: 102.3211 },
-          { latitude: 2.2925, longitude: 102.3035 },
-          { latitude: 2.2714, longitude: 102.2858 }
-        ],
-        distance: '8.2 km',
-        duration: '15 min',
-        driver_name: 'Siti Aminah',
-        driver_vehicle: 'Proton Saga (Grey)',
-        driver_plate: 'KCX 4321'
-      },
-      {
-        id: 'mock_trip_03',
-        passenger_id: user?.id || 'passenger_1',
-        passenger_name: user?.name || 'Muhammad Hazim',
-        pickup_address: 'Fakulti Kejuruteraan Elektrik (FKE), UTeM',
-        pickup_coords: { latitude: 2.3105, longitude: 102.3242 },
-        destination_address: 'Kolej Kediaman Satria, UTeM',
-        destination_coords: { latitude: 2.3164, longitude: 102.3235 },
-        fare: 'RM 5.00',
-        payment_method: 'cash',
-        payment_label: 'Cash',
-        timestamp: Date.now() - 3600000 * 48, // 2 days ago
-        status: 'cancelled',
-        route_polyline: [
-          { latitude: 2.3105, longitude: 102.3242 },
-          { latitude: 2.3164, longitude: 102.3235 }
-        ],
-        distance: '1.2 km',
-        duration: '4 min',
-        driver_name: 'Mohd Rizal',
-        driver_vehicle: 'Toyota Vios (Black)',
-        driver_plate: 'WXX 9988'
-      }
-    ];
-  };
-
   useEffect(() => {
     if (!user?.id) {
-      setRides(getMockRides());
+      setRides([]);
       setLoading(false);
       return;
     }
@@ -124,19 +47,12 @@ export default function HistoryScreen() {
         fetchedRides.push({ id: doc.id, ...doc.data() });
       });
 
-      // Sort client-side by timestamp descending to avoid composite index requirements
       fetchedRides.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-      if (fetchedRides.length === 0) {
-        // Fallback to simulated entries if empty
-        setRides(getMockRides());
-      } else {
-        setRides(fetchedRides);
-      }
+      setRides(fetchedRides);
       setLoading(false);
     }, (error) => {
       console.error('Error fetching ride history:', error);
-      setRides(getMockRides());
+      setRides([]);
       setLoading(false);
     });
 

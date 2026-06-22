@@ -87,10 +87,350 @@ logoutBtn.addEventListener('click', async () => {
 // ============================================================
 let usersUnsubscribe = null;
 let docsUnsubscribe = null;
+let ridesUnsubscribe = null;
+let chartInstances = {};
+let cachedAnalyticsPayload = null;
+
+const STATUS_LABELS = {
+  requested: 'Requested',
+  accepted: 'Accepted',
+  arrived: 'Arrived',
+  in_progress: 'In Progress',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  unknown: 'Unknown',
+};
+
+function getChartColors() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  return {
+    text: isDark ? '#cbd5e1' : '#475569',
+    grid: isDark ? '#334155' : '#e2e8f0',
+    primary: '#0057B8',
+    secondary: '#10b981',
+    accent: '#f59e0b',
+    danger: '#ef4444',
+    palette: ['#0057B8', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#64748b'],
+  };
+}
+
+function destroyCharts() {
+  Object.values(chartInstances).forEach((c) => c?.destroy());
+  chartInstances = {};
+}
+
+function parseRideDate(ride) {
+  if (ride.created_at?.toDate) return ride.created_at.toDate();
+  if (ride.timestamp) return new Date(ride.timestamp);
+  return null;
+}
+
+function getDummyRideAnalytics() {
+  return {
+    pickups: [
+      { location: 'Kolej Kediaman Lestari, UTeM', count: 42 },
+      { location: 'FTMK, UTeM Main Campus', count: 31 },
+      { location: 'FKE, UTeM', count: 18 },
+      { location: 'Kolej Tun Fatimah', count: 12 },
+      { location: 'UTeM Main Gate', count: 9 },
+    ],
+    destinations: [
+      { location: 'Mydin MITC, Ayer Keroh', count: 27 },
+      { location: 'Mahkota Parade, Melaka', count: 22 },
+      { location: 'Melaka Sentral', count: 19 },
+      { location: 'AEON Bandaraya Melaka', count: 14 },
+      { location: 'UTeM Main Campus', count: 11 },
+    ],
+  };
+}
+
+function getDummyRidesForCharts() {
+  const dummy = getDummyRideAnalytics();
+  const rides = [];
+  const statuses = ['completed', 'completed', 'completed', 'requested', 'accepted', 'cancelled', 'in_progress'];
+  const now = Date.now();
+
+  dummy.pickups.forEach((p, i) => {
+    for (let n = 0; n < p.count; n++) {
+      const dayOffset = n % 7;
+      rides.push({
+        pickup_address: p.location,
+        destination_address: dummy.destinations[n % dummy.destinations.length].location,
+        status: statuses[(i + n) % statuses.length],
+        timestamp: now - dayOffset * 86400000 - n * 3600000,
+      });
+    }
+  });
+
+  return rides.slice(0, 120);
+}
+
+function aggregateRideLocations(rides) {
+  const pickupMap = {};
+  const destMap = {};
+  rides.forEach((ride) => {
+    const p = ride.pickup_address || 'Unknown pickup';
+    const d = ride.destination_address || 'Unknown destination';
+    pickupMap[p] = (pickupMap[p] || 0) + 1;
+    destMap[d] = (destMap[d] || 0) + 1;
+  });
+  const toList = (map) =>
+    Object.entries(map)
+      .map(([location, count]) => ({ location, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  return { pickups: toList(pickupMap), destinations: toList(destMap) };
+}
+
+function aggregateRidesByDay(rides, days = 7) {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const keys = [];
+  const labels = [];
+
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    keys.push(key);
+    labels.push(d.toLocaleDateString('en-MY', { weekday: 'short', day: 'numeric', month: 'short' }));
+  }
+
+  const counts = Object.fromEntries(keys.map((k) => [k, 0]));
+  rides.forEach((ride) => {
+    const date = parseRideDate(ride);
+    if (!date) return;
+    const key = date.toISOString().slice(0, 10);
+    if (counts[key] !== undefined) counts[key]++;
+  });
+
+  return { labels, data: keys.map((k) => counts[k]) };
+}
+
+function aggregateStatusBreakdown(rides) {
+  const map = {};
+  rides.forEach((ride) => {
+    const s = ride.status || 'unknown';
+    map[s] = (map[s] || 0) + 1;
+  });
+  return map;
+}
+
+function truncateLabel(text, max = 28) {
+  if (!text || text.length <= max) return text;
+  return `${text.slice(0, max - 1)}…`;
+}
+
+function buildAnalyticsPayload(rides) {
+  const locations = aggregateRideLocations(rides);
+  const timeline = aggregateRidesByDay(rides, 7);
+  const statusMap = aggregateStatusBreakdown(rides);
+  const completed = statusMap.completed || 0;
+  const active = (statusMap.requested || 0) + (statusMap.accepted || 0) + (statusMap.arrived || 0) + (statusMap.in_progress || 0);
+  const weekTotal = timeline.data.reduce((sum, n) => sum + n, 0);
+
+  return {
+    rides,
+    pickups: locations.pickups,
+    destinations: locations.destinations,
+    timeline,
+    statusMap,
+    stats: {
+      total: rides.length,
+      completed,
+      active,
+      avgPerDay: +(weekTotal / 7).toFixed(1),
+    },
+  };
+}
+
+function renderAnalyticsTables(pickups, destinations) {
+  const pickupBody = document.getElementById('analytics-pickup-tbody');
+  const destBody = document.getElementById('analytics-destination-tbody');
+  pickupBody.innerHTML =
+    pickups.map((r) => `<tr><td>${r.location}</td><td><strong>${r.count}</strong></td></tr>`).join('') ||
+    '<tr><td colspan="2">No data</td></tr>';
+  destBody.innerHTML =
+    destinations.map((r) => `<tr><td>${r.location}</td><td><strong>${r.count}</strong></td></tr>`).join('') ||
+    '<tr><td colspan="2">No data</td></tr>';
+}
+
+function renderAnalyticsStats(stats) {
+  document.getElementById('analytics-stat-total').textContent = stats.total;
+  document.getElementById('analytics-stat-completed').textContent = stats.completed;
+  document.getElementById('analytics-stat-active').textContent = stats.active;
+  document.getElementById('analytics-stat-avg').textContent = stats.avgPerDay;
+}
+
+function renderAnalyticsCharts(payload) {
+  if (typeof Chart === 'undefined') return;
+
+  destroyCharts();
+  const colors = getChartColors();
+  const commonScale = {
+    ticks: { color: colors.text, font: { size: 11 } },
+    grid: { color: colors.grid },
+  };
+
+  const lineCtx = document.getElementById('chart-rides-line');
+  if (lineCtx) {
+    chartInstances.line = new Chart(lineCtx, {
+      type: 'line',
+      data: {
+        labels: payload.timeline.labels,
+        datasets: [
+          {
+            label: 'Rides',
+            data: payload.timeline.data,
+            borderColor: colors.primary,
+            backgroundColor: 'rgba(0, 87, 184, 0.12)',
+            fill: true,
+            tension: 0.35,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: colors.primary,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { mode: 'index', intersect: false },
+        },
+        scales: {
+          x: commonScale,
+          y: { ...commonScale, beginAtZero: true, ticks: { ...commonScale.ticks, stepSize: 1 } },
+        },
+      },
+    });
+  }
+
+  const topPickups = payload.pickups.slice(0, 6);
+  const pickupCtx = document.getElementById('chart-pickup-bar');
+  if (pickupCtx) {
+    chartInstances.pickup = new Chart(pickupCtx, {
+      type: 'bar',
+      data: {
+        labels: topPickups.map((r) => truncateLabel(r.location)),
+        datasets: [
+          {
+            label: 'Bookings',
+            data: topPickups.map((r) => r.count),
+            backgroundColor: colors.palette.slice(0, topPickups.length),
+            borderRadius: 6,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: 'y',
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ...commonScale, beginAtZero: true, ticks: { ...commonScale.ticks, stepSize: 1 } },
+          y: { ...commonScale, ticks: { ...commonScale.ticks, autoSkip: false } },
+        },
+      },
+    });
+  }
+
+  const topDest = payload.destinations.slice(0, 6);
+  const destCtx = document.getElementById('chart-destination-bar');
+  if (destCtx) {
+    chartInstances.destination = new Chart(destCtx, {
+      type: 'bar',
+      data: {
+        labels: topDest.map((r) => truncateLabel(r.location)),
+        datasets: [
+          {
+            label: 'Bookings',
+            data: topDest.map((r) => r.count),
+            backgroundColor: colors.secondary,
+            borderRadius: 6,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: 'y',
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ...commonScale, beginAtZero: true, ticks: { ...commonScale.ticks, stepSize: 1 } },
+          y: { ...commonScale, ticks: { ...commonScale.ticks, autoSkip: false } },
+        },
+      },
+    });
+  }
+
+  const statusEntries = Object.entries(payload.statusMap).sort((a, b) => b[1] - a[1]);
+  const statusCtx = document.getElementById('chart-status-doughnut');
+  if (statusCtx && statusEntries.length) {
+    chartInstances.status = new Chart(statusCtx, {
+      type: 'doughnut',
+      data: {
+        labels: statusEntries.map(([k]) => STATUS_LABELS[k] || k),
+        datasets: [
+          {
+            data: statusEntries.map(([, v]) => v),
+            backgroundColor: colors.palette.slice(0, statusEntries.length),
+            borderWidth: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '62%',
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: colors.text, boxWidth: 12, padding: 14, font: { size: 11 } },
+          },
+        },
+      },
+    });
+  }
+}
+
+function renderAnalyticsDashboard(rides) {
+  const payload = buildAnalyticsPayload(rides);
+  cachedAnalyticsPayload = payload;
+  renderAnalyticsStats(payload.stats);
+  renderAnalyticsTables(payload.pickups, payload.destinations);
+  renderAnalyticsCharts(payload);
+}
+
+function refreshAnalyticsChartsTheme() {
+  if (cachedAnalyticsPayload) {
+    renderAnalyticsCharts(cachedAnalyticsPayload);
+  }
+}
+
+function startRideAnalyticsListener() {
+  if (ridesUnsubscribe) ridesUnsubscribe();
+  ridesUnsubscribe = db.collection('rides').onSnapshot(
+    (snap) => {
+      const rides = [];
+      snap.forEach((docSnap) => rides.push(docSnap.data()));
+      if (rides.length === 0) {
+        renderAnalyticsDashboard(getDummyRidesForCharts());
+        return;
+      }
+      renderAnalyticsDashboard(rides);
+    },
+    () => {
+      renderAnalyticsDashboard(getDummyRidesForCharts());
+    }
+  );
+}
 
 function startDatabaseListeners() {
   if (usersUnsubscribe) usersUnsubscribe();
   if (docsUnsubscribe) docsUnsubscribe();
+  startRideAnalyticsListener();
 
   // Listen to users collection
   usersUnsubscribe = db.collection('users').onSnapshot((usersSnapshot) => {
@@ -109,13 +449,17 @@ function startDatabaseListeners() {
 
         // Driver check: if vehicle details exist in userData, or road tax in userDoc, user acts as a driver.
         const hasVehicleData = !!(userData.vehiclePlate || userData.vehicleModel || userDoc.road_tax_url);
+        const role = hasVehicleData ? 'driver' : 'passenger';
         
         // Calculate status dynamically:
-        // Approved: is_verified is true
-        // Rejected: rejection_reason is populated
-        // Pending: otherwise
+        // Passengers: always approved
+        // Approved Driver: is_verified is true
+        // Rejected Driver: rejection_reason is populated
+        // Pending Driver: otherwise
         let status = 'pending';
-        if (userData.is_verified === true || userDoc.is_verified === true) {
+        if (role === 'passenger') {
+          status = 'approved';
+        } else if (userData.is_verified === true || userDoc.is_verified === true) {
           status = 'approved';
         } else if (userData.rejection_reason || userDoc.rejection_reason) {
           status = 'rejected';
@@ -126,7 +470,7 @@ function startDatabaseListeners() {
           name: userData.name || 'Anonymous User',
           email: userData.email || '',
           phone: userData.phone || '',
-          role: hasVehicleData ? 'driver' : 'passenger',
+          role: role,
           plate: userData.vehiclePlate || '',
           model: userData.vehicleModel || '',
           color: userData.vehicleColor || '',
@@ -353,7 +697,7 @@ function renderTables() {
         <td>
           <div class="btn-group">
             <button class="btn btn-primary" onclick="openInspectionModal('${user.id}')">View</button>
-            ${user.status === 'pending' && user.role !== 'passenger' ? `
+            ${user.role === 'driver' ? `
               <button class="btn btn-secondary" onclick="approveDirect('${user.id}')">Approve</button>
               <button class="btn btn-danger" onclick="openRejectReasonModal('${user.id}')">Reject</button>
             ` : ''}
@@ -404,18 +748,6 @@ window.approveDirect = function(userId) {
   // Confirm popup for admin sanity
   if (!confirm(`Are you sure you want to approve driver documents for ${user.name} (${user.id})?`)) return;
 
-  // Check if we are running in mock sandbox fallback
-  const isMock = !usersDatabase.some(u => u.matricCardUrl || u.roadTaxUrl); 
-  if (isMock || localStorage.getItem('admin_logged_in') === 'true') {
-    // If mock data, just update locally
-    user.status = 'approved';
-    user.reason = '';
-    updateStatistics();
-    renderTables();
-    return;
-  }
-
-  // Firestore update
   db.collection('users').doc(userId).update({
     is_verified: true,
     rejection_reason: firebase.firestore.FieldValue.delete(),
@@ -460,8 +792,8 @@ window.openInspectionModal = function(userId) {
   const modalApproveBtn = document.getElementById('modal-approve-btn');
   const modalDeclineBtn = document.getElementById('modal-decline-btn');
 
-  // Passenger has no approve/reject buttons
-  if (user.status !== 'pending' || user.role === 'passenger') {
+  // Passenger has no approve/reject buttons. Drivers should have them regardless of status.
+  if (user.role === 'passenger') {
     modalApproveBtn.style.display = 'none';
     modalDeclineBtn.style.display = 'none';
   } else {
@@ -544,21 +876,6 @@ document.getElementById('confirm-reject-btn').addEventListener('click', () => {
   const user = usersDatabase.find(u => u.id === currentSelectedUserId);
   if (!user) return;
 
-  const isMock = !usersDatabase.some(u => u.matricCardUrl || u.roadTaxUrl); 
-  if (isMock || localStorage.getItem('admin_logged_in') === 'true') {
-    // Local mock update
-    user.status = 'rejected';
-    user.reason = reason;
-    updateStatistics();
-    renderTables();
-    
-    document.getElementById('reject-modal').style.display = 'none';
-    document.getElementById('view-modal').style.display = 'none';
-    currentSelectedUserId = null;
-    return;
-  }
-
-  // Firestore write rejection reason
   db.collection('users').doc(currentSelectedUserId).update({
     is_verified: false,
     rejection_reason: reason,
@@ -605,6 +922,9 @@ menuItems.forEach(item => {
     const tabName = item.getAttribute('data-tab');
     document.querySelectorAll('.content-section').forEach(sec => sec.classList.remove('active'));
     document.getElementById(`${tabName}-section`).classList.add('active');
+    if (tabName === 'analytics') {
+      setTimeout(() => refreshAnalyticsChartsTheme(), 50);
+    }
   });
 });
 
@@ -618,6 +938,7 @@ themeToggleBtn.addEventListener('click', () => {
   const newTheme = currentTheme === 'light' ? 'dark' : 'light';
   document.documentElement.setAttribute('data-theme', newTheme);
   localStorage.setItem('admin-theme', newTheme);
+  refreshAnalyticsChartsTheme();
 });
 
 // Initial Setup

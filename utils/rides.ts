@@ -7,6 +7,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
+import { stripUndefined } from '@/utils/firestoreHelpers';
 import { notifyUser } from '@/utils/notifications';
 
 async function notifyPassengerOfRide(
@@ -51,10 +52,13 @@ export interface CreateRideInput {
   route_polyline?: Coords[];
   payment_method: string;
   payment_label: string;
+  payment_id?: string | null;
+  hitpay_id?: string | null;
+  payment_status?: string;
 }
 
 export async function createRide(input: CreateRideInput) {
-  const ref = await addDoc(collection(db, 'rides'), {
+  const ref = await addDoc(collection(db, 'rides'), stripUndefined({
     ...input,
     driver_id: null,
     driver_name: null,
@@ -65,7 +69,7 @@ export async function createRide(input: CreateRideInput) {
     status: 'requested' as RideStatus,
     timestamp: Date.now(),
     created_at: serverTimestamp(),
-  });
+  }));
   return ref.id;
 }
 
@@ -182,7 +186,7 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
   };
   const route = { pickup: input.pickup, destination: input.destination };
 
-  await addDoc(collection(db, 'transactions'), {
+  await addDoc(collection(db, 'transactions'), stripUndefined({
     user_id: input.driver_id,
     ride_id: input.rideId,
     amount: grossAmount,
@@ -193,9 +197,9 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
     route,
     passenger: passengerDetails,
     created_at: serverTimestamp(),
-  });
+  }));
 
-  await addDoc(collection(db, 'transactions'), {
+  await addDoc(collection(db, 'transactions'), stripUndefined({
     user_id: input.driver_id,
     ride_id: input.rideId,
     amount: -commission,
@@ -204,9 +208,9 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
     label: 'System commission fee (10%)',
     status: 'completed',
     created_at: serverTimestamp(),
-  });
+  }));
 
-  await addDoc(collection(db, 'transactions'), {
+  await addDoc(collection(db, 'transactions'), stripUndefined({
     user_id: input.passenger_id,
     ride_id: input.rideId,
     amount: -grossAmount,
@@ -216,5 +220,5 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
     status: 'completed',
     route,
     created_at: serverTimestamp(),
-  });
+  }));
 }

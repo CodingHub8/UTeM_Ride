@@ -1,27 +1,18 @@
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
-import Constants, { ExecutionEnvironment } from 'expo-constants';
+import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 
-const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-
-let Notifications: any = null;
-if (!isExpoGo) {
-  try {
-    Notifications = require('expo-notifications');
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowBanner: true,
-        shouldShowList: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-      }),
-    });
-  } catch (e) {
-    console.warn('Failed to load expo-notifications:', e);
-  }
-}
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 const EXPO_PUSH_ENDPOINT = 'https://exp.host/--/api/v2/push/send';
 
@@ -33,10 +24,6 @@ function getProjectId(): string | undefined {
 }
 
 export async function registerForPushNotifications(): Promise<string | null> {
-  if (isExpoGo || !Notifications) {
-    console.log('Skipping push notifications registration in Expo Go.');
-    return null;
-  }
   if (!Device.isDevice) return null;
 
   try {
@@ -143,10 +130,6 @@ export async function notifyUser(
 }
 
 export async function presentLocalNotification(title: string, body: string) {
-  if (isExpoGo || !Notifications) {
-    console.log('Local notification (Expo Go mockup):', title, ' - ', body);
-    return;
-  }
   try {
     await Notifications.scheduleNotificationAsync({
       content: { title, body, sound: 'default' },

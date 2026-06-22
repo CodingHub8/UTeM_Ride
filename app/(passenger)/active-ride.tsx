@@ -3,13 +3,14 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Linking } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { cancelRide } from '@/utils/rides';
+import ChatModal from '@/components/ChatModal';
 
 const ACTIVE_STATUSES = ['requested', 'accepted', 'arrived', 'in_progress'];
 
@@ -68,6 +69,7 @@ export default function ActiveRideScreen() {
 
   const [ride, setRide] = useState<any>(null);
   const [completed, setCompleted] = useState(false);
+  const [showChat, setShowChat] = useState(false);
 
   useEffect(() => {
     if (rideId) {
@@ -251,10 +253,13 @@ export default function ActiveRideScreen() {
             </View>
           </View>
           <View style={styles.actionBtns}>
-            <TouchableOpacity style={styles.actionBtn}>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => ride?.driver_phone && Linking.openURL(`tel:${ride.driver_phone}`)}
+            >
               <Ionicons name="call" size={20} color={Colors.primary} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn}>
+            <TouchableOpacity style={styles.actionBtn} onPress={() => (ride?.id || rideId) && setShowChat(true)}>
               <Ionicons name="chatbubble" size={20} color={Colors.primary} />
             </TouchableOpacity>
           </View>
@@ -306,6 +311,17 @@ export default function ActiveRideScreen() {
           </TouchableOpacity>
         </View>
       </View>
+      {(ride?.id || rideId) && user && (
+        <ChatModal
+          visible={showChat}
+          onClose={() => setShowChat(false)}
+          rideId={ride?.id || rideId || ''}
+          userId={user.id}
+          userName={user.name}
+          userRole="passenger"
+          isDark={isDark}
+        />
+      )}
     </View>
   );
 }

@@ -64,6 +64,7 @@ export default function PassengerLayout() {
       {/* Hide non-tab screens from the tab bar */}
       <Tabs.Screen name="ride-request" options={{ href: null }} />
       <Tabs.Screen name="active-ride" options={{ href: null }} />
+      <Tabs.Screen name="payment-history" options={{ href: null }} />
     </Tabs>
   );
 }

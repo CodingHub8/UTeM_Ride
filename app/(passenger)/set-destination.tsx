@@ -18,6 +18,9 @@ const BASE_FARES = {
 
 const RATE_PER_KM = 0.50; 
 
+const DEFAULT_PICKUP_COORDS = { latitude: 2.3135, longitude: 102.3211 };
+const DEFAULT_PICKUP_ADDRESS = 'UTeM Kampus Induk, Durian Tunggal';
+
 const RIDE_TYPES = [
   { id: 'standard', name: 'Standard', icon: '🚗', basePrice: BASE_FARES.standard, seats: '3-4' },
   { id: 'premium', name: 'Premium', icon: '✨', basePrice: BASE_FARES.premium, seats: '5-6' },
@@ -115,9 +118,10 @@ export default function SetDestinationScreen() {
         setPickupQuery(loc.address);
         setSelectedPickupPlace(loc.address);
       } else {
-        setPickupAddress('Current Location');
-        setPickupQuery('Current Location');
-        setSelectedPickupPlace('Current Location');
+        setPickupAddress(DEFAULT_PICKUP_ADDRESS);
+        setPickupCoords(DEFAULT_PICKUP_COORDS);
+        setPickupQuery(DEFAULT_PICKUP_ADDRESS);
+        setSelectedPickupPlace(DEFAULT_PICKUP_ADDRESS);
       }
     })();
   }, []);
@@ -134,16 +138,17 @@ export default function SetDestinationScreen() {
       setPickupQuery(loc.address);
       setSelectedPickupPlace(loc.address);
     } else {
-      setPickupAddress('Current Location');
-      setPickupQuery('Current Location');
-      setSelectedPickupPlace('Current Location');
-      Alert.alert('Location Access Failed', 'Could not retrieve current location.');
+      setPickupAddress(DEFAULT_PICKUP_ADDRESS);
+      setPickupCoords(DEFAULT_PICKUP_COORDS);
+      setPickupQuery(DEFAULT_PICKUP_ADDRESS);
+      setSelectedPickupPlace(DEFAULT_PICKUP_ADDRESS);
+      Alert.alert('Location Access Failed', 'Could not retrieve current location. Defaulting to UTeM Kampus Induk.');
     }
     setFetchingLoc(false);
   };
 
   useEffect(() => {
-    if (selectedPlace && pickupAddress) {
+    if (selectedPlace && pickupAddress && pickupAddress !== 'Fetching current location...') {
       (async () => {
         setIsSearching(true);
         try {
@@ -155,7 +160,15 @@ export default function SetDestinationScreen() {
             destination = { lat: parseFloat(destLat), lng: parseFloat(destLng) };
           }
 
-          const directions = await getDirections(pickupAddress, destination);
+          let origin: string | { lat: number, lng: number } = pickupCoords 
+            ? { lat: pickupCoords.latitude, lng: pickupCoords.longitude } 
+            : pickupAddress;
+
+          if (origin === 'Current Location' || !origin) {
+            origin = { lat: DEFAULT_PICKUP_COORDS.latitude, lng: DEFAULT_PICKUP_COORDS.longitude };
+          }
+
+          const directions = await getDirections(origin, destination);
           if (directions) {
             setRouteData(directions);
           }
@@ -164,7 +177,7 @@ export default function SetDestinationScreen() {
         }
       })();
     }
-  }, [selectedPlace, pickupAddress, destLat, destLng, initialDestination, selectedCoords]);
+  }, [selectedPlace, pickupAddress, pickupCoords, destLat, destLng, initialDestination, selectedCoords]);
 
   const calculateFare = (basePrice: number) => {
     if (!routeData) return 'RM --';
@@ -470,7 +483,7 @@ export default function SetDestinationScreen() {
                   if (user && !user.is_2FA_verified) {
                     Alert.alert(
                       '2FA Verification Required',
-                      'To view or join pools, please verify your account using the 2FA link sent to your email/SMS. You can simulate this by clicking the banner on the home screen.',
+                      'To view or join pools, please complete 2FA with Google Authenticator. Tap the banner on the home screen.',
                       [{ text: 'OK' }]
                     );
                     return;
@@ -507,7 +520,7 @@ export default function SetDestinationScreen() {
                 if (user && !user.is_2FA_verified) {
                   Alert.alert(
                     '2FA Verification Required',
-                    'To book or create rides, please verify your account using the 2FA link sent to your email/SMS. You can simulate this by clicking the banner on the home screen.',
+                    'To book or create rides, please complete 2FA with Google Authenticator. Tap the banner on the home screen.',
                     [{ text: 'OK' }]
                   );
                   return;

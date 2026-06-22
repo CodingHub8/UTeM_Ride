@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UTeM Ride — Payment Failed</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #0057B8;
+      --error: #ef4444;
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --text-secondary: #94a3b8;
+    }
+    body {
+      font-family: 'Outfit', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background: radial-gradient(circle at top, #1e293b, var(--bg));
+      color: var(--text);
+      padding: 1rem;
+    }
+    .card {
+      text-align: center;
+      background: var(--card-bg);
+      padding: 3rem 2rem;
+      border-radius: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      max-width: 400px;
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-top: 0;
+      margin-bottom: 0.75rem;
+      background: linear-gradient(135deg, #f87171, #ef4444);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    p {
+      color: var(--text-secondary);
+      line-height: 1.6;
+      font-size: 1rem;
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+    }
+    .ref-badge {
+      display: inline-block;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      padding: 0.5rem 1rem;
+      border-radius: 99px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      font-family: monospace;
+      margin-bottom: 2rem;
+    }
+    .btn {
+      display: inline-block;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 1rem 1.5rem;
+      background: linear-gradient(135deg, #475569, #334155);
+      color: #fff;
+      text-decoration: none;
+      border-radius: 14px;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(71, 85, 105, 0.2);
+      border: none;
+      cursor: pointer;
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(71, 85, 105, 0.35);
+    }
+    .btn:active {
+      transform: translateY(0);
+    }
+    .redirect-text {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-top: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    
+    /* Cross Animation */
+    .error-animation {
+      margin: 0.5rem auto 2rem;
+    }
+    .checkmark_error {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      display: block;
+      stroke-width: 3;
+      stroke: #ef4444;
+      stroke-miterlimit: 10;
+      box-shadow: inset 0px 0px 0px #ef4444;
+      animation: fill_error .4s ease-in-out .4s forwards, scale .3s ease-in-out 0s both;
+    }
+    .checkmark__circle_error {
+      stroke-dasharray: 166;
+      stroke-dashoffset: 166;
+      stroke-width: 3;
+      stroke-miterlimit: 10;
+      stroke: #ef4444;
+      fill: none;
+      animation: stroke .6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+    }
+    .cross__path1 {
+      transform-origin: 50% 50%;
+      stroke-dasharray: 48;
+      stroke-dashoffset: 48;
+      animation: stroke .3s cubic-bezier(0.65, 0, 0.45, 1) .8s forwards;
+    }
+    .cross__path2 {
+      transform-origin: 50% 50%;
+      stroke-dasharray: 48;
+      stroke-dashoffset: 48;
+      animation: stroke .3s cubic-bezier(0.65, 0, 0.45, 1) 1s forwards;
+    }
+    @keyframes stroke {
+      100% {
+        stroke-dashoffset: 0;
+      }
+    }
+    @keyframes scale {
+      0%, 100% {
+        transform: none;
+      }
+      50% {
+        transform: scale3d(1.1, 1.1, 1);
+      }
+    }
+    @keyframes fill_error {
+      100% {
+        box-shadow: inset 0px 0px 0px 40px rgba(239, 68, 68, 0.15);
+      }
+    }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top: 2px solid var(--text-secondary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="error-animation">
+      <svg class="checkmark_error" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+        <circle class="checkmark__circle_error" cx="26" cy="26" r="25" fill="none"/>
+        <path class="cross__path1" fill="none" d="M16 16l20 20"/>
+        <path class="cross__path2" fill="none" d="M36 16L16 36"/>
+      </svg>
+    </div>
+    <h1>Payment Failed</h1>
+    <p>We could not process your transaction. Please go back to the app and try again.</p>
+    <div class="ref-badge" id="refText">Ref: --</div>
+    
+    <a id="returnBtn" class="btn" href="#">Return to UTeM Ride</a>
+    
+    <div class="redirect-text">
+      <div class="spinner"></div>
+      <span>Redirecting back automatically...</span>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const status = params.get('status') || 'failed';
+      const reference = params.get('reference') || '';
+      
+      document.getElementById('refText').textContent = 'Ref: ' + (reference || 'N/A');
+
+      const deepLink = 'utemride://payment-complete?status=' + encodeURIComponent(status) + '&reference=' + encodeURIComponent(reference);
+      
+      const btn = document.getElementById('returnBtn');
+      btn.href = deepLink;
+
+      // Automatically redirect to deep link
+      setTimeout(() => {
+        window.location.replace(deepLink);
+      }, 1000);
+    })();
+  </script>
+</body>
+</html>

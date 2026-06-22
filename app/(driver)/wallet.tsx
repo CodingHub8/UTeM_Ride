@@ -5,7 +5,7 @@ import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/
 import { useTheme } from '@/contexts/ThemeContext';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, query, where, orderBy, onSnapshot, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { processBankPayout } from '@/utils/payment';
 
@@ -70,12 +70,16 @@ export default function WalletScreen() {
     if (!user) return;
     const q = query(
       collection(db, 'transactions'),
-      where('user_id', '==', user.id),
-      orderBy('created_at', 'desc')
+      where('user_id', '==', user.id)
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const txs: Transaction[] = [];
-      snapshot.forEach((doc) => {
+      const docs = [...snapshot.docs].sort((a, b) => {
+        const ta = a.data().created_at?.toMillis?.() || a.data().created_at?.seconds * 1000 || 0;
+        const tb = b.data().created_at?.toMillis?.() || b.data().created_at?.seconds * 1000 || 0;
+        return tb - ta;
+      });
+      docs.forEach((doc) => {
         const data = doc.data();
         txs.push({
           id: doc.id,

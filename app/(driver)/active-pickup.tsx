@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, ActivityIndicator, Linking } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +9,9 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { markArrived, publishDriverLocation, cancelRide } from '@/utils/rides';
+import ChatModal from '@/components/ChatModal';
 
 const DEFAULT_PICKUP = { latitude: 2.3135, longitude: 102.3211 };
 
@@ -38,7 +40,9 @@ export default function ActivePickupScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDark, theme } = useTheme();
+  const { user } = useAuth();
   const mapRef = useRef<MapView>(null);
+  const [showChat, setShowChat] = useState(false);
 
   const {
     rideId,
@@ -272,10 +276,13 @@ export default function ActivePickupScreen() {
             <Text style={[styles.passengerName, dynamicStyles.passengerName]}>{passengerName || 'Passenger'}</Text>
             <Text style={[styles.pickupAddr, dynamicStyles.pickupAddr]}>{pickup || 'FTMK, UTeM Main Campus'}</Text>
           </View>
-          <TouchableOpacity style={styles.contactBtn}>
+          <TouchableOpacity
+            style={styles.contactBtn}
+            onPress={() => passengerPhone && Linking.openURL(`tel:${passengerPhone}`)}
+          >
             <Ionicons name="call" size={20} color={Colors.primary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.contactBtn}>
+          <TouchableOpacity style={styles.contactBtn} onPress={() => rideId && setShowChat(true)}>
             <Ionicons name="chatbubble" size={20} color={Colors.primary} />
           </TouchableOpacity>
         </View>
@@ -302,6 +309,17 @@ export default function ActivePickupScreen() {
           </TouchableOpacity>
         </View>
       </View>
+      {rideId && user && (
+        <ChatModal
+          visible={showChat}
+          onClose={() => setShowChat(false)}
+          rideId={rideId}
+          userId={user.id}
+          userName={user.name}
+          userRole="driver"
+          isDark={isDark}
+        />
+      )}
     </View>
   );
 }

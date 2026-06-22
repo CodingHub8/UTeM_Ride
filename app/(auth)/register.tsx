@@ -30,15 +30,21 @@ export default function RegisterScreen() {
   // Validation errors
   const [emailError, setEmailError] = useState('');
   const [phoneError, setPhoneError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   const validateEmail = () => {
     if (!email) {
       setEmailError('');
       return;
     }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const isValidFormat = emailRegex.test(email);
     const endsWithUtem = email.endsWith('@student.utem.edu.my') || email.endsWith('@utem.edu.my');
-    if (!endsWithUtem) {
-      setEmailError('Only use UTeM provided email domains');
+    
+    if (!isValidFormat) {
+      setEmailError('Enter a valid email address');
+    } else if (!endsWithUtem) {
+      setEmailError('Only use UTeM provided email domains (@student.utem.edu.my or @utem.edu.my)');
     } else {
       setEmailError('');
     }
@@ -84,7 +90,33 @@ export default function RegisterScreen() {
     }
   };
 
-  const isValid = email && phone && password && password === confirmPassword && !emailError && !phoneError;
+  const validatePassword = () => {
+    if (!password) {
+      setPasswordError('');
+      return;
+    }
+    const hasMinLength = password.length >= 8;
+    const hasUppercase = /[A-Z]/.test(password);
+    const hasLowercase = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSymbol = /[^A-Za-z0-9]/.test(password);
+
+    if (!hasMinLength) {
+      setPasswordError('Must be at least 8 characters long');
+    } else if (!hasUppercase) {
+      setPasswordError('Must contain at least 1 uppercase letter');
+    } else if (!hasLowercase) {
+      setPasswordError('Must contain at least 1 lowercase letter');
+    } else if (!hasNumber) {
+      setPasswordError('Must contain at least 1 number');
+    } else if (!hasSymbol) {
+      setPasswordError('Must contain at least 1 symbol/special character');
+    } else {
+      setPasswordError('');
+    }
+  };
+
+  const isValid = email && phone && password && password === confirmPassword && !emailError && !phoneError && !passwordError;
 
   const handleRegister = async () => {
     if (!isValid) return;
@@ -192,8 +224,10 @@ export default function RegisterScreen() {
               icon="lock-closed-outline" 
               placeholder="Password" 
               value={password} 
-              onChangeText={setPassword} 
+              onChangeText={(t) => { setPassword(t); if (passwordError) setPasswordError(''); }} 
               secure 
+              onBlur={validatePassword}
+              error={passwordError}
               isDark={isDark}
             />
             
@@ -279,6 +313,8 @@ function InputField({
   error?: string;
   isDark: boolean;
 }) {
+  const [showPassword, setShowPassword] = useState(false);
+
   const dynamicStyles = {
     inputGroup: {
       backgroundColor: isDark ? Colors.gray900 : Colors.gray50,
@@ -300,10 +336,15 @@ function InputField({
           value={value}
           onChangeText={onChangeText}
           keyboardType={keyboardType ?? 'default'}
-          secureTextEntry={secure}
+          secureTextEntry={secure && !showPassword}
           autoCapitalize={secure || keyboardType === 'email-address' ? 'none' : 'sentences'}
           onBlur={onBlur}
         />
+        {secure && (
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
+            <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={Colors.gray400} />
+          </TouchableOpacity>
+        )}
       </View>
       {error ? <Text style={styles.inputError}>{error}</Text> : null}
     </View>

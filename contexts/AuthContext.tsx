@@ -65,6 +65,7 @@ interface AuthContextType {
   verify2FA: () => Promise<void>;
   verifyAdminDocs: () => Promise<void>;
   updateProfile: (updates: Record<string, any>) => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -185,12 +186,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       credential = await createUserWithEmailAndPassword(auth, email, password);
     } catch (authError: any) {
       if (authError.code === 'auth/email-already-in-use') {
-        throw new Error(
-          'This email is already registered. Please go back and sign in, ' +
-          'or use a different email address.'
-        );
+        try {
+          // Self-healing: check if this is an orphaned account (Auth exists but no Firestore profile)
+          const userSnap = await getDoc(doc(db, 'users', studentId));
+          if (!userSnap.exists()) {
+            console.log('[AuthContext] Orphaned account detected. Performing self-healing clean up...');
+            const tempCred = await signInWithEmailAndPassword(auth, email, password);
+            await tempCred.user.delete();
+            credential = await createUserWithEmailAndPassword(auth, email, password);
+          } else {
+            throw new Error(
+              'This email is already registered. Please go back and sign in, ' +
+              'or use a different email address.'
+            );
+          }
+        } catch (healError: any) {
+          throw new Error(
+            'This email is already registered. Please go back and sign in, ' +
+            'or use a different email address.'
+          );
+        }
+      } else {
+        throw authError;
       }
-      throw authError;
     }
     const firebaseUid = credential.user.uid;
 
@@ -199,10 +217,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let roadTaxUrl = '';
     try {
       if (matricCardImage) {
-        matricCardUrl = await uploadImageAsync(matricCardImage, `documents/${studentId}/matric_card.jpg`);
+        matricCardUrl = await uploadImageAsync(matricCardImage, `documents/${firebaseUid}/matric_card.jpg`);
       }
       if (roadTaxImage) {
-        roadTaxUrl = await uploadImageAsync(roadTaxImage, `documents/${studentId}/road_tax.jpg`);
+        roadTaxUrl = await uploadImageAsync(roadTaxImage, `documents/${firebaseUid}/road_tax.jpg`);
       }
     } catch (uploadError: any) {
       // Clean up the Auth account if storage upload fails
@@ -298,10 +316,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [user]);
 
-  /**
-   * verify2FA — simulates clicking the verification link sent via email/SMS.
-   * Updates Firestore and local state.
-   */
   const verify2FA = useCallback(async () => {
     if (!user) return;
     try {
@@ -344,6 +358,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
+  const refreshProfile = useCallback(async () => {
+    if (!user) return;
+    const snap = await getDoc(doc(db, 'users', user.id));
+    if (!snap.exists()) return;
+    const data = snap.data();
+    setUser((prev) => prev ? {
+      ...prev,
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      gender: data.gender,
+      is_verified: data.is_verified ?? false,
+      is_2FA_verified: data.is_2FA_verified ?? false,
+      vehiclePlate: data.vehiclePlate,
+      vehicleModel: data.vehicleModel,
+      vehicleColor: data.vehicleColor,
+    } : null);
+  }, [user]);
+
   const updateProfile = useCallback(async (updates: Record<string, any>) => {
     if (!user) return;
     const userRef = doc(db, 'users', user.id);
@@ -352,8 +385,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const value = useMemo(
-    () => ({ user, isAuthenticated: !!user, loading, role, login, register, logout, switchRole, setRole, verify2FA, verifyAdminDocs, updateProfile }),
-    [user, loading, role, login, register, logout, switchRole, verify2FA, verifyAdminDocs, updateProfile],
+    () => ({ user, isAuthenticated: !!user, loading, role, login, register, logout, switchRole, setRole, verify2FA, verifyAdminDocs, updateProfile, refreshProfile }),
+    [user, loading, role, login, register, logout, switchRole, verify2FA, verifyAdminDocs, updateProfile, refreshProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -21,6 +21,7 @@ import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getRecentDestinations, saveRecentDestination, getRecentPickups } from '@/utils/location';
+import TwoFactorModal from '@/components/TwoFactorModal';
 
 const ACTIVE_STATUSES = ['requested', 'accepted', 'arrived', 'in_progress'];
 
@@ -64,7 +65,7 @@ const DARK_MAP_STYLE = [
 export default function PassengerHomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, verify2FA } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const { isDark, theme, themeProgress } = useTheme();
   const mapRef = useRef<MapView>(null);
   
@@ -75,6 +76,13 @@ export default function PassengerHomeScreen() {
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
   const [activeRide, setActiveRide] = useState<any | null>(null);
+  const [show2FA, setShow2FA] = useState(false);
+
+  useEffect(() => {
+    if (user && !user.is_2FA_verified) {
+      setShow2FA(true);
+    }
+  }, [user?.id, user?.is_2FA_verified]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -425,31 +433,12 @@ export default function PassengerHomeScreen() {
         {user && !user.is_2FA_verified && (
           <TouchableOpacity 
             style={[styles.verificationBanner, { backgroundColor: Colors.warning, top: insets.top + 10 + (activeRide ? 56 : 0) }]}
-            onPress={async () => {
-              Alert.alert(
-                'Simulate 2FA Verification',
-                'Do you want to simulate clicking the email/SMS link to complete 2FA verification?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Verify 2FA Now',
-                    onPress: async () => {
-                      try {
-                        await verify2FA();
-                        Alert.alert('2FA Verified', 'Account has been successfully verified.');
-                      } catch (err) {
-                        Alert.alert('Error', 'Verification failed.');
-                      }
-                    }
-                  }
-                ]
-              );
-            }}
+            onPress={() => setShow2FA(true)}
           >
             <View style={styles.verificationBannerLeft}>
               <Ionicons name="warning-outline" size={18} color={Colors.white} />
               <Text style={styles.verificationBannerText}>
-                2FA Pending: Tap to simulate link verification.
+                2FA Pending: Set up Google Authenticator.
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={Colors.white} />
@@ -601,6 +590,16 @@ export default function PassengerHomeScreen() {
           </TouchableOpacity>
         )}
       </Animated.View>
+      {user && (
+        <TwoFactorModal
+          visible={show2FA}
+          onClose={() => setShow2FA(false)}
+          userId={user.id}
+          email={user.email}
+          onVerified={refreshProfile}
+          isDark={isDark}
+        />
+      )}
     </GestureHandlerRootView>
   );
 }

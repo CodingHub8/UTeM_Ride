@@ -235,7 +235,7 @@ export default function DocumentUploadScreen() {
         encryptedData
       );
       
-      Alert.alert('Registration Successful', `Welcome! Account ${studentId} registered. Verify 2FA via the banner on Home to book rides.`, [
+      Alert.alert('Registration Successful', `Welcome! Account ${studentId} registered. Set up Google Authenticator from the banner on Home to book rides.`, [
         { text: 'OK', onPress: () => router.replace('/(auth)/role-select') }
       ]);
     } catch (e: any) {

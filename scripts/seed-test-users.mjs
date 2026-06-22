@@ -6,6 +6,7 @@
  *
  * Credentials created:
  *   Passenger:  passenger@test.com / Test1234   (studentId: B032110283)
+ *   Passenger:  suvindran94@gmail.com / Test1234  (studentId: B032110300)
  *   Driver:     driver@test.com    / Test1234   (studentId: B032110194)
  */
 
@@ -56,6 +57,18 @@ const testUsers = [
     vehicleColor: '',
   },
   {
+    email: 'suvindran94@gmail.com',
+    password: 'Test1234',
+    studentId: 'B032110300',
+    name: 'Suvindran',
+    phone: '+60123456780',
+    gender: 'Male',
+    role: 'passenger',
+    vehiclePlate: '',
+    vehicleModel: '',
+    vehicleColor: '',
+  },
+  {
     email: 'driver@test.com',
     password: 'Test1234',
     studentId: 'B032110194',
@@ -89,27 +102,23 @@ async function seedUser(u) {
 
   const userDocRef = doc(db, 'users', u.studentId);
   const existing = await getDoc(userDocRef);
-  if (existing.exists()) {
-    console.log('  - Firestore /users doc already exists, skipping write');
-  } else {
-    await setDoc(userDocRef, {
-      firebaseUid: uid,
-      name: u.name,
-      email: u.email,
-      phone: u.phone,
-      gender: u.gender,
-      role: u.role,
-      is_verified: true,
-      is_2FA_verified: true,
-      vehiclePlate: u.vehiclePlate,
-      vehicleModel: u.vehicleModel,
-      vehicleColor: u.vehicleColor,
-      encryptedDocs: '',
-      created_at: serverTimestamp(),
-      updated_at: serverTimestamp(),
-    });
-    console.log(`  - Firestore /users/${u.studentId} written`);
-  }
+  await setDoc(userDocRef, {
+    firebaseUid: uid,
+    name: u.name,
+    email: u.email,
+    phone: u.phone,
+    gender: u.gender,
+    role: u.role,
+    is_verified: true,
+    is_2FA_verified: false,
+    vehiclePlate: u.vehiclePlate,
+    vehicleModel: u.vehicleModel,
+    vehicleColor: u.vehicleColor,
+    encryptedDocs: '',
+    updated_at: serverTimestamp(),
+    ...(existing.exists() ? {} : { created_at: serverTimestamp() }),
+  }, { merge: true });
+  console.log(`  - Firestore /users/${u.studentId} ${existing.exists() ? 'updated (2FA reset)' : 'written'}`);
 
   await setDoc(doc(db, 'uid_index', uid), { studentId: u.studentId });
   console.log(`  - Firestore /uid_index/${uid} written`);
@@ -135,6 +144,7 @@ async function seedUser(u) {
     console.log('\nAll test users seeded successfully.\n');
     console.log('Login credentials:');
     console.log('  Passenger:  passenger@test.com / Test1234');
+    console.log('  Passenger:  suvindran94@gmail.com / Test1234');
     console.log('  Driver:     driver@test.com    / Test1234');
     process.exit(0);
   } catch (err) {

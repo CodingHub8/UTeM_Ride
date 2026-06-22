@@ -3,7 +3,6 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { encryptData } from '@/utils/encryption';
 import { saveRecentDestination, saveRecentPickup } from '@/utils/location';
-import { initiateFPXPayment, initiateCardPayment } from '@/utils/payment';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -11,7 +10,7 @@ import { Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, Toucha
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createRide } from '@/utils/rides';
-import * as WebBrowser from 'expo-web-browser';
+import { processHitPayCheckout, parseAmount } from '@/utils/paymentStore';
 
 // Default fallback coordinates
 const DEFAULT_PICKUP = { latitude: 2.3135, longitude: 102.3211 };
@@ -281,36 +280,32 @@ export default function RideRequestScreen() {
             disabled={paymentLoading}
             onPress={async () => {
               setPaymentLoading(true);
-              let txId = 'cash';
+              let paymentId = '';
+              let hitpayId = '';
+              let paymentStatus = paymentMethod === 'cash' ? 'completed' : 'pending';
 
               if (paymentMethod !== 'cash') {
                 try {
-                  const fareAmount = parseFloat(price ? price.replace(/[^\d.]/g, '') : '5.50') || 5.50;
-                  let paymentResult;
-
-                  if (paymentMethod === 'fpx') {
-                    paymentResult = await initiateFPXPayment(
-                      fareAmount,
-                      selectedBank || 'Maybank2u',
-                      user?.id || 'anonymous'
-                    );
-                  } else {
-                    paymentResult = await initiateCardPayment(
-                      fareAmount,
-                      { cardNumber, cardName, cardExpiry, cardCvv },
-                      user?.id || 'anonymous'
-                    );
-                  }
-
-                  if (paymentResult.success && paymentResult.paymentUrl) {
-                    // Open the hosted checkout page securely in the browser
-                    await WebBrowser.openBrowserAsync(paymentResult.paymentUrl);
-                    txId = paymentResult.transactionId;
-                  } else {
-                    Alert.alert('Payment Error', 'Failed to generate payment request session.');
+                  const fareAmount = parseAmount(price || '5.50') || 5.50;
+                  const checkout = await processHitPayCheckout({
+                    amount: fareAmount,
+                    userId: user?.id || 'anonymous',
+                    userEmail: user?.email || 'passenger@test.com',
+                    userName: user?.name,
+                    paymentMethod,
+                    paymentLabel,
+                    bankName: selectedBank,
+                    cardDetails: { cardNumber, cardName, cardExpiry, cardCvv },
+                    context: 'ride',
+                    purpose: `Ride fare - ${address || destination}`,
+                  });
+                  if (!checkout.success) {
                     setPaymentLoading(false);
                     return;
                   }
+                  paymentId = checkout.paymentId;
+                  hitpayId = checkout.hitpayId;
+                  paymentStatus = 'completed';
                 } catch (err: any) {
                   Alert.alert('Payment Failed', err.message || 'HitPay connection failed.');
                   setPaymentLoading(false);
@@ -360,6 +355,9 @@ export default function RideRequestScreen() {
                   route_polyline: routePoints,
                   payment_method: paymentMethod,
                   payment_label: paymentLabel,
+                  payment_id: paymentId || null,
+                  hitpay_id: hitpayId || null,
+                  payment_status: paymentStatus,
                 });
               } catch (fsError: any) {
                 console.error('Error writing ride to Firestore:', fsError);
@@ -384,7 +382,7 @@ export default function RideRequestScreen() {
                   paymentMethod,
                   paymentLabel,
                   encryptedDetails: encryptedPaymentDetails || undefined,
-                  transactionId: txId
+                  transactionId: paymentId || hitpayId || 'cash'
                 }
               });
             }}
@@ -572,6 +570,7 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
   modalTitle: { fontSize: FontSize.lg, fontWeight: FontWeight.bold },
   methodItem: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.gray200, marginBottom: Spacing.sm },
+  sandboxNote: { fontSize: FontSize.xs, marginBottom: Spacing.sm, lineHeight: 18 },
   methodItemText: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, marginLeft: Spacing.md, flex: 1 },
   bankItem: { padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.gray200, marginBottom: Spacing.sm, alignItems: 'center' },
   bankItemText: { fontSize: FontSize.md, fontWeight: FontWeight.semibold },

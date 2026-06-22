@@ -10,6 +10,8 @@ import { db } from '@/utils/firebase';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { subscribeDriverEarnings, EarningsSummary } from '@/utils/earnings';
+import TwoFactorModal from '@/components/TwoFactorModal';
 
 // Default region: UTeM Main Campus, Melaka
 const UTEM_REGION = {
@@ -43,13 +45,26 @@ const DARK_MAP_STYLE = [
 export default function DriverHomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, verify2FA } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const { isDark, theme } = useTheme();
   const [isOnline, setIsOnline] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [activeRide, setActiveRide] = useState<any | null>(null);
+  const [earnings, setEarnings] = useState<EarningsSummary>({ today: 0, week: 0, todayTrips: 0, weekTrips: 0 });
+  const [show2FA, setShow2FA] = useState(false);
   const mapRef = useRef<MapView>(null);
+
+  useEffect(() => {
+    if (user && !user.is_2FA_verified) {
+      setShow2FA(true);
+    }
+  }, [user?.id, user?.is_2FA_verified]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    return subscribeDriverEarnings(user.id, setEarnings);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -239,31 +254,12 @@ export default function DriverHomeScreen() {
       {user && !user.is_2FA_verified && (
         <TouchableOpacity 
           style={[styles.verificationBanner, { backgroundColor: Colors.warning, top: insets.top + 10 + (activeRide ? 56 : 0) }]}
-          onPress={async () => {
-            Alert.alert(
-              'Simulate 2FA Verification',
-              'Do you want to simulate clicking the email/SMS link to complete 2FA verification?',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Verify 2FA Now',
-                  onPress: async () => {
-                    try {
-                      await verify2FA();
-                      Alert.alert('2FA Verified', 'Account has been successfully verified.');
-                    } catch (err) {
-                      Alert.alert('Error', 'Verification failed.');
-                    }
-                  }
-                }
-              ]
-            );
-          }}
+          onPress={() => setShow2FA(true)}
         >
           <View style={styles.verificationBannerLeft}>
             <Ionicons name="warning-outline" size={18} color={Colors.white} />
             <Text style={styles.verificationBannerText}>
-              2FA Pending: Tap to simulate link verification.
+              2FA Pending: Set up Google Authenticator.
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={Colors.white} />
@@ -310,16 +306,17 @@ export default function DriverHomeScreen() {
         <View style={[styles.earningsCard, dynamicStyles.earningsCard]}>
           <View>
             <Text style={[styles.earningsLabel, dynamicStyles.earningsLabel]}>{"Today's Earnings"}</Text>
-            <Text style={[styles.earningsValue, dynamicStyles.earningsValue]}>RM 0.00</Text>
+            <Text style={[styles.earningsValue, dynamicStyles.earningsValue]}>RM {earnings.today.toFixed(2)}</Text>
+            <Text style={[styles.statLabel, dynamicStyles.statLabel]}>This week: RM {earnings.week.toFixed(2)}</Text>
           </View>
           <View style={styles.earningsRight}>
             <View style={styles.statItem}>
-              <Text style={[styles.statValue, dynamicStyles.statValue]}>0</Text>
-              <Text style={[styles.statLabel, dynamicStyles.statLabel]}>Trips</Text>
+              <Text style={[styles.statValue, dynamicStyles.statValue]}>{earnings.todayTrips}</Text>
+              <Text style={[styles.statLabel, dynamicStyles.statLabel]}>Trips Today</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={[styles.statValue, dynamicStyles.statValue]}>0h</Text>
-              <Text style={[styles.statLabel, dynamicStyles.statLabel]}>Online</Text>
+              <Text style={[styles.statValue, dynamicStyles.statValue]}>{earnings.weekTrips}</Text>
+              <Text style={[styles.statLabel, dynamicStyles.statLabel]}>Trips Week</Text>
             </View>
           </View>
         </View>
@@ -370,6 +367,17 @@ export default function DriverHomeScreen() {
           </View>
         )}
       </View>
+
+      {user && (
+        <TwoFactorModal
+          visible={show2FA}
+          onClose={() => setShow2FA(false)}
+          userId={user.id}
+          email={user.email}
+          onVerified={refreshProfile}
+          isDark={isDark}
+        />
+      )}
     </View>
   );
 }

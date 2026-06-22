@@ -8,9 +8,10 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { performOCR } from '@/utils/ocr';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, deleteField } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/utils/firebase';
+import TwoFactorModal from '@/components/TwoFactorModal';
 
 interface VehicleDoc {
   id: string;
@@ -38,11 +39,12 @@ async function uploadDocAsync(uri: string, path: string): Promise<string> {
 export default function DriverProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, logout, switchRole, verifyAdminDocs, updateProfile } = useAuth();
+  const { user, logout, switchRole, updateProfile, refreshProfile } = useAuth();
   const { themeMode, setTheme, isDark } = useTheme();
 
   // Modal State
   const [modalVisible, setModalVisible] = useState(false);
+  const [show2FA, setShow2FA] = useState(false);
   const [vehicleDocs, setVehicleDocs] = useState<VehicleDoc[]>([]);
   const [plateNumber, setPlateNumber] = useState(user?.vehiclePlate || '');
   const [vehicleModel, setVehicleModel] = useState(user?.vehicleModel || '');
@@ -180,27 +182,67 @@ export default function DriverProfileScreen() {
         }
       }
 
-      await updateProfile({
-        vehiclePlate: plateNumber,
-        vehicleModel: vehicleModel,
-        vehicleColor: vehicleColor,
-        road_tax_expiry: roadTaxExpiry || null,
-      });
+      const isRevertedToPassenger = uploadedDocs.length === 0 || (!plateNumber.trim() && !vehicleModel.trim());
 
-      const docsRef = doc(db, 'user_documents', user.id);
-      await setDoc(
-        docsRef,
-        {
-          user_id: user.id,
-          vehicle_documents: uploadedDocs,
-          plate_number: plateNumber,
-          vehicle_model: vehicleModel,
-          vehicle_color: vehicleColor,
+      if (isRevertedToPassenger) {
+        // Clear all vehicle fields and verification status to turn back into passenger
+        await updateProfile({
+          vehiclePlate: '',
+          vehicleModel: '',
+          vehicleColor: '',
+          road_tax_expiry: null,
+          is_verified: true,
+          rejection_reason: deleteField(),
+        });
+
+        const docsRef = doc(db, 'user_documents', user.id);
+        await setDoc(
+          docsRef,
+          {
+            user_id: user.id,
+            vehicle_documents: [],
+            plate_number: '',
+            vehicle_model: '',
+            vehicle_color: '',
+            road_tax_expiry: null,
+            road_tax_url: '',
+            is_verified: true,
+            rejection_reason: deleteField(),
+            updated_at: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      } else {
+        // Driver update (still has vehicle/documents)
+        // If they had rejection reason before, saving new documents clears it and sets is_verified to false (pending validation)
+        await updateProfile({
+          vehiclePlate: plateNumber,
+          vehicleModel: vehicleModel,
+          vehicleColor: vehicleColor,
           road_tax_expiry: roadTaxExpiry || null,
-          updated_at: serverTimestamp(),
-        },
-        { merge: true }
-      );
+          is_verified: false,
+          rejection_reason: deleteField(),
+        });
+
+        const docsRef = doc(db, 'user_documents', user.id);
+        const mainRoadTaxImage = uploadedDocs.find(d => d.type === 'Road Tax')?.url || uploadedDocs[0]?.url || '';
+        await setDoc(
+          docsRef,
+          {
+            user_id: user.id,
+            vehicle_documents: uploadedDocs,
+            plate_number: plateNumber,
+            vehicle_model: vehicleModel,
+            vehicle_color: vehicleColor,
+            road_tax_expiry: roadTaxExpiry || null,
+            road_tax_url: mainRoadTaxImage,
+            is_verified: false,
+            rejection_reason: deleteField(),
+            updated_at: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
 
       Alert.alert(
         'Saved',
@@ -213,16 +255,6 @@ export default function DriverProfileScreen() {
       Alert.alert('Error', 'Failed to update vehicle details: ' + (err?.message || ''));
     } finally {
       setSavingVehicle(false);
-    }
-  };
-
-  const handleSimulateApproval = async () => {
-    if (!user) return;
-    try {
-      await verifyAdminDocs();
-      Alert.alert('Simulate Admin Approval', 'Documents approved successfully! Your verification status is now updated.');
-    } catch (err: any) {
-      Alert.alert('Error', 'Failed to approve documents: ' + err.message);
     }
   };
 
@@ -285,6 +317,20 @@ export default function DriverProfileScreen() {
         <DriverRow icon="call-outline" label="Phone" value={user?.phone ?? 'Not set'} isDark={isDark} last />
       </View>
 
+      {/* Security */}
+      <Text style={styles.sectionTitle}>Security</Text>
+      <View style={[styles.card, dynamicStyles.card]}>
+        <TouchableOpacity style={[styles.settingRow, dynamicStyles.border]} onPress={() => setShow2FA(true)}>
+          <View style={styles.settingLeft}>
+            <Ionicons name="shield-checkmark-outline" size={20} color={user?.is_2FA_verified ? Colors.success : Colors.warning} />
+            <Text style={[styles.settingLabel, dynamicStyles.text]}>Two-Factor Authentication</Text>
+          </View>
+          <Text style={{ color: user?.is_2FA_verified ? Colors.success : Colors.warning, fontWeight: FontWeight.semibold, fontSize: FontSize.sm }}>
+            {user?.is_2FA_verified ? 'Verified' : 'Verify now'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Settings */}
       <Text style={styles.sectionTitle}>Settings</Text>
       <View style={[styles.card, dynamicStyles.card]}>
@@ -332,6 +378,17 @@ export default function DriverProfileScreen() {
         <Ionicons name="log-out-outline" size={20} color={Colors.error} />
         <Text style={styles.logoutText}>Log Out</Text>
       </TouchableOpacity>
+
+      {user && (
+        <TwoFactorModal
+          visible={show2FA}
+          onClose={() => setShow2FA(false)}
+          userId={user.id}
+          email={user.email}
+          onVerified={refreshProfile}
+          isDark={isDark}
+        />
+      )}
 
       {/* Update Vehicle & Docs Modal */}
       <Modal
@@ -419,17 +476,6 @@ export default function DriverProfileScreen() {
               </View>
 
               {/* Simulation section */}
-              <View style={[styles.simulationBox, { borderColor: Colors.warning + '50', backgroundColor: Colors.warning + '10' }]}>
-                <Ionicons name="construct" size={20} color={Colors.warning} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.simulationTitle, { color: Colors.warning }]}>Admin Simulation Utility</Text>
-                  <Text style={[styles.simulationDesc, dynamicStyles.subText]}>Click below to simulate an immediate admin approval for this driver account's documents.</Text>
-                  <TouchableOpacity style={[styles.simulateBtn, { backgroundColor: Colors.warning }]} onPress={handleSimulateApproval}>
-                    <Text style={styles.simulateBtnText}>Simulate Approve Docs</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
               <TouchableOpacity
                 style={[styles.saveBtn, savingVehicle && { opacity: 0.7 }]}
                 onPress={handleSaveVehicle}

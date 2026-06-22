@@ -1,8 +1,8 @@
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, Switch, ScrollView, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, Switch, ScrollView, Alert, ActivityIndicator, Platform, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,13 +37,19 @@ export default function CreatePoolScreen() {
   const { user } = useAuth();
 
   const [destination, setDestination] = useState('');
+  const [pickup, setPickup] = useState('');
   const [pricePerSeat, setPricePerSeat] = useState('');
   const [seats, setSeats] = useState(3);
   const [genderMatching, setGenderMatching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [destinationCoords, setDestinationCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [pickupCoords, setPickupCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<string | null>(null);
+  const [selectedPickup, setSelectedPickup] = useState<string | null>(null);
+  const [activeInput, setActiveInput] = useState<'pickup' | 'destination'>('destination');
+  const [expandedPoolId, setExpandedPoolId] = useState<string | null>(null);
+  const [poolBookings, setPoolBookings] = useState<Record<string, any[]>>({});
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [searchingPlaces, setSearchingPlaces] = useState(false);
   const [currentCoords, setCurrentCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -76,6 +82,9 @@ export default function CreatePoolScreen() {
       if (loc?.coords) {
         const c = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
         setCurrentCoords(c);
+        setPickupCoords(c);
+        setPickup(loc.address);
+        setSelectedPickup(loc.address);
         mapRef.current?.animateToRegion({ ...c, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 600);
       }
     })();
@@ -83,9 +92,11 @@ export default function CreatePoolScreen() {
 
   useEffect(() => {
     const t = setTimeout(async () => {
-      if (destination.length > 2 && destination !== selectedPlace) {
+      const queryText = activeInput === 'pickup' ? pickup : destination;
+      const selected = activeInput === 'pickup' ? selectedPickup : selectedPlace;
+      if (queryText.length > 2 && queryText !== selected) {
         setSearchingPlaces(true);
-        const results = await getPlaceAutocomplete(destination, currentCoords?.latitude, currentCoords?.longitude);
+        const results = await getPlaceAutocomplete(queryText, currentCoords?.latitude, currentCoords?.longitude);
         setSuggestions(results);
         setSearchingPlaces(false);
       } else {
@@ -93,18 +104,32 @@ export default function CreatePoolScreen() {
       }
     }, 400);
     return () => clearTimeout(t);
-  }, [destination, selectedPlace, currentCoords]);
+  }, [destination, pickup, selectedPlace, selectedPickup, activeInput, currentCoords]);
 
   const selectSuggestion = async (item: any) => {
-    setDestination(item.name);
-    setSelectedPlace(item.name);
-    setSuggestions([]);
     const details = await getPlaceDetails(item.id);
-    if (details) {
-      setDestinationCoords(details);
-      mapRef.current?.animateToRegion({ ...details, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 600);
+    if (activeInput === 'pickup') {
+      setPickup(item.name);
+      setSelectedPickup(item.name);
+      if (details) setPickupCoords(details);
+    } else {
+      setDestination(item.name);
+      setSelectedPlace(item.name);
+      if (details) setDestinationCoords(details);
     }
+    setSuggestions([]);
+    const focus = details || pickupCoords || destinationCoords;
+    if (focus) mapRef.current?.animateToRegion({ ...focus, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 600);
   };
+
+  useEffect(() => {
+    if (!expandedPoolId) return;
+    const unsub = onSnapshot(collection(db, 'carpool_slots', expandedPoolId, 'bookings'), (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setPoolBookings((prev) => ({ ...prev, [expandedPoolId]: list }));
+    });
+    return () => unsub();
+  }, [expandedPoolId]);
 
   const cancelPool = (id: string) => {
     Alert.alert('Cancel Pool', 'Are you sure you want to cancel this pool slot?', [
@@ -175,6 +200,20 @@ export default function CreatePoolScreen() {
         <Text style={styles.sectionTitle}>Route Information</Text>
         <View style={[styles.card, dynamicStyles.card]}>
           <View style={styles.inputGroup}>
+            <Text style={styles.label}>Pickup</Text>
+            <View style={[styles.input, dynamicStyles.input, styles.searchRow]}>
+              <Ionicons name="navigate" size={18} color={Colors.success} />
+              <TextInput
+                style={[styles.searchInput, { color: isDark ? Colors.white : Colors.gray900 }]}
+                placeholder="Search pickup..."
+                placeholderTextColor={Colors.gray500}
+                value={pickup}
+                onFocus={() => setActiveInput('pickup')}
+                onChangeText={(text) => { setPickup(text); if (selectedPickup) setSelectedPickup(null); if (pickupCoords) setPickupCoords(null); }}
+              />
+            </View>
+          </View>
+          <View style={styles.inputGroup}>
             <Text style={styles.label}>Destination</Text>
             <View style={[styles.input, dynamicStyles.input, styles.searchRow]}>
               <Ionicons name="search" size={18} color={Colors.gray400} />
@@ -183,6 +222,7 @@ export default function CreatePoolScreen() {
                 placeholder="Search destination..."
                 placeholderTextColor={Colors.gray500}
                 value={destination}
+                onFocus={() => setActiveInput('destination')}
                 onChangeText={(text) => {
                   setDestination(text);
                   if (selectedPlace) setSelectedPlace(null);
@@ -221,8 +261,14 @@ export default function CreatePoolScreen() {
                 showsUserLocation
                 showsMyLocationButton={false}
               >
+                {pickupCoords && (
+                  <Marker coordinate={pickupCoords} title={selectedPickup || 'Pickup'} pinColor={Colors.success} />
+                )}
                 {destinationCoords && (
                   <Marker coordinate={destinationCoords} title={selectedPlace || 'Destination'} pinColor={Colors.error} />
+                )}
+                {pickupCoords && destinationCoords && (
+                  <Polyline coordinates={[pickupCoords, destinationCoords]} strokeColor={Colors.primary} strokeWidth={3} />
                 )}
               </MapView>
               {!destinationCoords && (
@@ -324,6 +370,10 @@ export default function CreatePoolScreen() {
               Alert.alert('2FA Required', 'Please complete 2FA verification first.');
               return;
             }
+            if (!pickup.trim()) {
+              Alert.alert('Missing pickup', 'Please enter a pickup location.');
+              return;
+            }
             if (!destination.trim()) {
               Alert.alert('Missing destination', 'Please enter a destination.');
               return;
@@ -345,6 +395,8 @@ export default function CreatePoolScreen() {
                 driver_name: user.name,
                 driver_vehicle: `${user.vehicleModel || ''} ${user.vehicleColor ? `(${user.vehicleColor})` : ''}`.trim(),
                 driver_plate: user.vehiclePlate || '',
+                pickup: pickup.trim(),
+                pickup_coords: pickupCoords,
                 destination: destination.trim(),
                 destination_coords: destinationCoords,
                 date_time: Timestamp.fromDate(scheduled),
@@ -409,7 +461,32 @@ export default function CreatePoolScreen() {
                     <Text style={styles.cancelPoolText}>Cancel</Text>
                   </TouchableOpacity>
                 )}
+                <TouchableOpacity style={styles.cancelPoolBtn} onPress={() => setExpandedPoolId(expandedPoolId === pool.id ? null : pool.id)}>
+                  <Ionicons name="people-outline" size={16} color={Colors.primary} />
+                  <Text style={[styles.cancelPoolText, { color: Colors.primary }]}>Passengers</Text>
+                </TouchableOpacity>
               </View>
+              {expandedPoolId === pool.id && (
+                <View style={{ marginTop: Spacing.sm }}>
+                  {(poolBookings[pool.id] || []).length === 0 ? (
+                    <Text style={[styles.rowSub, dynamicStyles.subText]}>No passengers joined yet.</Text>
+                  ) : (
+                    (poolBookings[pool.id] || []).map((b) => (
+                      <View key={b.id} style={[styles.passengerRow, { borderColor: isDark ? Colors.darkBorder : Colors.gray200 }]}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.poolDest, dynamicStyles.text]}>{b.passenger_name || b.passenger_id}</Text>
+                          <Text style={[styles.rowSub, dynamicStyles.subText]}>{b.passenger_phone || '—'} · {b.payment_method?.toUpperCase()} · {b.payment_status || b.status}</Text>
+                        </View>
+                        {b.passenger_phone ? (
+                          <TouchableOpacity onPress={() => Linking.openURL(`tel:${b.passenger_phone}`)}>
+                            <Ionicons name="call" size={18} color={Colors.primary} />
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
             </View>
           ))
         )}
@@ -449,6 +526,7 @@ const styles = StyleSheet.create({
   poolMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   cancelPoolBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
   cancelPoolText: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.error },
+  passengerRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: BorderRadius.md, padding: Spacing.sm, marginBottom: Spacing.xs },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   searchInput: { flex: 1, fontSize: FontSize.md },
   suggestBox: { borderWidth: 1, borderRadius: BorderRadius.md, marginTop: Spacing.xs, overflow: 'hidden' },
