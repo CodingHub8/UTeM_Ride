@@ -1,0 +1,54 @@
+# EAS build ignore configuration (excludes .env and google-services.json so they are uploaded to EAS)
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# typescript
+*.tsbuildinfo
+
+app-example
+
+# generated native folders
+/ios
+/android
+.vscode/extensions.json
+
+# Admin portal auto-generated config
+admin/env-config.js
+
+# firebase cache and hosting bundle
+.firebase/
+hosting/
+
+# Large binary files (APK exceeds GitHub 100MB limit)
+*.apk
+
+# Archives
+scratch/
