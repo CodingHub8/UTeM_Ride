@@ -6,7 +6,7 @@ import { initiateFPXPayment, initiateCardPayment, PAYMENT_CONFIG } from '@/utils
 import { waitForHitPayReturn } from '@/utils/paymentReturn';
 
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'cancelled';
-export type PaymentContext = 'ride' | 'pool_booking';
+export type PaymentContext = 'ride' | 'pool_booking' | 'wallet_topup';
 
 export interface PaymentRecord {
   user_id: string;

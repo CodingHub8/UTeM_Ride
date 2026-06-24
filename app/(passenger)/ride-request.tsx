@@ -11,6 +11,10 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createRide } from '@/utils/rides';
 import { processHitPayCheckout, parseAmount } from '@/utils/paymentStore';
+import { collection, addDoc, query, where, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/utils/firebase';
+import { checkPassengerOverlap } from '@/utils/validation';
+import { useEffect } from 'react';
 
 // Default fallback coordinates
 const DEFAULT_PICKUP = { latitude: 2.3135, longitude: 102.3211 };
@@ -45,9 +49,32 @@ export default function RideRequestScreen() {
 
   // Payment states
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'fpx' | 'card'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'fpx' | 'card' | 'wallet'>('cash');
   const [paymentLabel, setPaymentLabel] = useState('Cash');
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
+
+  // Monitor passenger's dynamic wallet balance
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'transactions'), where('user_id', '==', user.id));
+    const unsub = onSnapshot(q, (snap) => {
+      let balance = 0;
+      snap.forEach((d) => {
+        const data = d.data();
+        // Exclude driver role transactions
+        if (data.role === 'driver') return;
+        if (!data.role) {
+          // Fallback filtering for older seeded/unlabeled documents
+          if (data.transaction_type === 'service_fee') return;
+          if (data.transaction_type === 'fare_payment' && data.amount > 0 && !data.label?.toLowerCase().includes('refund')) return;
+        }
+        balance += Number(data.amount) || 0;
+      });
+      setWalletBalance(Math.max(0, balance));
+    }, (err) => console.warn('[RideRequest] Failed to fetch wallet transactions:', err));
+    return unsub;
+  }, [user]);
 
   // FPX states
   const [selectedBank, setSelectedBank] = useState('');
@@ -64,10 +91,15 @@ export default function RideRequestScreen() {
   // Modal subviews: 'options', 'fpx', 'card'
   const [paymentStep, setPaymentStep] = useState<'options' | 'fpx' | 'card'>('options');
 
-  const selectMethod = (method: 'cash' | 'fpx' | 'card') => {
+  const selectMethod = (method: 'cash' | 'fpx' | 'card' | 'wallet') => {
     if (method === 'cash') {
       setPaymentMethod('cash');
       setPaymentLabel('Cash');
+      setEncryptedPaymentDetails('');
+      setShowPaymentModal(false);
+    } else if (method === 'wallet') {
+      setPaymentMethod('wallet');
+      setPaymentLabel('E-Wallet');
       setEncryptedPaymentDetails('');
       setShowPaymentModal(false);
     } else {
@@ -119,7 +151,8 @@ export default function RideRequestScreen() {
     pickupLng,
     distance,
     duration,
-    polyline
+    polyline,
+    scheduledTime
   } = useLocalSearchParams<{
     destination: string,
     address: string,
@@ -130,7 +163,8 @@ export default function RideRequestScreen() {
     pickupLng?: string,
     distance?: string,
     duration?: string,
-    polyline?: string
+    polyline?: string,
+    scheduledTime?: string
   }>();
 
   const pickupCoord = pickupLat && pickupLng
@@ -279,14 +313,41 @@ export default function RideRequestScreen() {
             style={[styles.requestBtn, paymentLoading && { opacity: 0.7 }]}
             disabled={paymentLoading}
             onPress={async () => {
+              if (!user) {
+                Alert.alert('Not signed in', 'Please sign in first.');
+                return;
+              }
+
               setPaymentLoading(true);
+              const fareAmount = parseAmount(price || '5.50') || 5.50;
+
+              // 1. Enforce overlap checks before creating request
+              const targetTime = scheduledTime ? new Date(scheduledTime) : new Date();
+              const overlap = await checkPassengerOverlap(user.id, targetTime);
+              if (overlap.hasOverlap) {
+                Alert.alert('Scheduling Overlap', overlap.details);
+                setPaymentLoading(false);
+                return;
+              }
+
               let paymentId = '';
               let hitpayId = '';
               let paymentStatus = paymentMethod === 'cash' ? 'completed' : 'pending';
 
-              if (paymentMethod !== 'cash') {
+              if (paymentMethod === 'wallet') {
+                // Check if passenger has enough wallet balance
+                if (walletBalance < fareAmount) {
+                  Alert.alert(
+                    'Insufficient Balance',
+                    `Your current E-Wallet balance is RM ${walletBalance.toFixed(2)}, which is insufficient to cover this fare of RM ${fareAmount.toFixed(2)}. Please choose another payment method.`
+                  );
+                  setPaymentLoading(false);
+                  return;
+                }
+                paymentId = 'wal_' + Math.random().toString(36).substring(2, 11).toUpperCase();
+                paymentStatus = 'completed';
+              } else if (paymentMethod !== 'cash') {
                 try {
-                  const fareAmount = parseAmount(price || '5.50') || 5.50;
                   const checkout = await processHitPayCheckout({
                     amount: fareAmount,
                     userId: user?.id || 'anonymous',
@@ -358,7 +419,23 @@ export default function RideRequestScreen() {
                   payment_id: paymentId || null,
                   hitpay_id: hitpayId || null,
                   payment_status: paymentStatus,
+                  scheduled_time: scheduledTime || null,
                 });
+
+                // Write held transaction to block funds in escrow if paying with FPX/Card/Wallet
+                if (paymentMethod !== 'cash') {
+                  await addDoc(collection(db, 'transactions'), {
+                    user_id: user.id,
+                    ride_id: rideId,
+                    amount: -fareAmount,
+                    payment_method: paymentMethod,
+                    transaction_type: 'fare_payment',
+                    label: `Ride fare paid via ${paymentLabel} (Held in Escrow)`,
+                    role: 'passenger',
+                    status: 'held',
+                    created_at: serverTimestamp(),
+                  });
+                }
               } catch (fsError: any) {
                 console.error('Error writing ride to Firestore:', fsError);
                 Alert.alert('Booking Error', fsError.message || 'Failed to create ride.');
@@ -431,6 +508,12 @@ export default function RideRequestScreen() {
                   <Ionicons name="cash-outline" size={24} color={Colors.primary} />
                   <Text style={[styles.methodItemText, dynamicStyles.text]}>Cash</Text>
                   {paymentMethod === 'cash' && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />}
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.methodItem, paymentMethod === 'wallet' && { borderColor: Colors.primary }]} onPress={() => selectMethod('wallet')}>
+                  <Ionicons name="wallet-outline" size={24} color={Colors.primary} />
+                  <Text style={[styles.methodItemText, dynamicStyles.text]}>Passenger E-Wallet (Balance: RM {walletBalance.toFixed(2)})</Text>
+                  {paymentMethod === 'wallet' && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />}
                 </TouchableOpacity>
 
                 <TouchableOpacity style={[styles.methodItem, paymentMethod === 'fpx' && { borderColor: Colors.primary }]} onPress={() => selectMethod('fpx')}>

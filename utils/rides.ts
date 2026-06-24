@@ -1,10 +1,14 @@
 import {
-  collection,
+    collection,
   doc,
   addDoc,
   updateDoc,
   getDoc,
   serverTimestamp,
+  query,
+  where,
+  getDocs,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { stripUndefined } from '@/utils/firestoreHelpers';
@@ -55,6 +59,7 @@ export interface CreateRideInput {
   payment_id?: string | null;
   hitpay_id?: string | null;
   payment_status?: string;
+  scheduled_time?: string | null;
 }
 
 export async function createRide(input: CreateRideInput) {
@@ -149,6 +154,53 @@ export async function cancelRide(rideId: string) {
   });
 }
 
+export async function cancelAndRefundRide(
+  rideId: string,
+  passengerId: string,
+  fareAmount: number,
+  paymentMethod: string,
+  paymentLabel?: string
+) {
+  const ref = doc(db, 'rides', rideId);
+  await updateDoc(ref, {
+    status: 'cancelled' as RideStatus,
+    cancelled_at: serverTimestamp(),
+  });
+
+  if (paymentMethod !== 'cash') {
+    const q = query(
+      collection(db, 'transactions'),
+      where('ride_id', '==', rideId),
+      where('user_id', '==', passengerId),
+      where('status', '==', 'held')
+    );
+    const snap = await getDocs(q);
+    const batch = writeBatch(db);
+    let hasHeld = false;
+
+    snap.forEach((d) => {
+      batch.update(d.ref, { status: 'refunded' });
+      hasHeld = true;
+    });
+
+    if (hasHeld) {
+      const refundRef = doc(collection(db, 'transactions'));
+      batch.set(refundRef, {
+        user_id: passengerId,
+        ride_id: rideId,
+        amount: fareAmount, // credit refund
+        payment_method: paymentMethod,
+        transaction_type: 'refund',
+        label: `Refund: Ride cancelled (${paymentLabel || paymentMethod})`,
+        role: 'passenger',
+        status: 'completed',
+        created_at: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+}
+
 export function parseFare(fareString: string | undefined | null): number {
   if (!fareString) return 0;
   const cleaned = fareString.toString().replace(/[^\d.]/g, '');
@@ -186,39 +238,78 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
   };
   const route = { pickup: input.pickup, destination: input.destination };
 
+  // 1. Create Driver Gross Fare Transaction
   await addDoc(collection(db, 'transactions'), stripUndefined({
     user_id: input.driver_id,
     ride_id: input.rideId,
-    amount: grossAmount,
+    amount: input.payment_method === 'cash' ? 0 : grossAmount,
+    cash_amount: grossAmount,
     payment_method: input.payment_method,
     transaction_type: 'fare_payment',
-    label: 'Trip payment from passenger',
+    label: input.payment_method === 'cash' ? 'Trip payment from passenger (Cash)' : 'Trip payment from passenger',
+    role: 'driver',
     status: 'completed',
     route,
     passenger: passengerDetails,
     created_at: serverTimestamp(),
   }));
 
+  // 2. Create Driver Commission service fee Transaction
   await addDoc(collection(db, 'transactions'), stripUndefined({
     user_id: input.driver_id,
     ride_id: input.rideId,
-    amount: -commission,
+    amount: input.payment_method === 'cash' ? 0 : -commission,
+    cash_amount: commission,
     payment_method: input.payment_method,
     transaction_type: 'service_fee',
-    label: 'System commission fee (10%)',
+    label: input.payment_method === 'cash' ? 'System commission fee (Cash - 0%)' : 'System commission fee (10%)',
+    role: 'driver',
     status: 'completed',
     created_at: serverTimestamp(),
   }));
 
-  await addDoc(collection(db, 'transactions'), stripUndefined({
-    user_id: input.passenger_id,
-    ride_id: input.rideId,
-    amount: -grossAmount,
-    payment_method: input.payment_method,
-    transaction_type: 'fare_payment',
-    label: 'Ride fare paid',
-    status: 'completed',
-    route,
-    created_at: serverTimestamp(),
-  }));
+  // 3. Passenger transaction: release held transaction if it exists
+  let passengerPaidUpdated = false;
+  if (input.payment_method !== 'cash') {
+    try {
+      const q = query(
+        collection(db, 'transactions'),
+        where('ride_id', '==', input.rideId),
+        where('user_id', '==', input.passenger_id),
+        where('status', '==', 'held')
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const batch = writeBatch(db);
+        snap.forEach((d) => {
+          batch.update(d.ref, {
+            status: 'completed',
+            label: `Ride fare paid (Escrow Released)`,
+            role: 'passenger',
+          });
+        });
+        await batch.commit();
+        passengerPaidUpdated = true;
+      }
+    } catch (err) {
+      console.warn('Error releasing held transaction, fallback to new entry:', err);
+    }
+  }
+
+  // 4. Create new passenger completed transaction if fallback or cash
+  if (!passengerPaidUpdated) {
+    await addDoc(collection(db, 'transactions'), stripUndefined({
+      user_id: input.passenger_id,
+      ride_id: input.rideId,
+      amount: input.payment_method === 'cash' ? 0 : -grossAmount,
+      cash_amount: grossAmount,
+      payment_method: input.payment_method,
+      transaction_type: 'fare_payment',
+      label: input.payment_method === 'cash' ? 'Ride fare paid (Cash)' : 'Ride fare paid',
+      role: 'passenger',
+      status: 'completed',
+      route,
+      created_at: serverTimestamp(),
+    }));
+  }
 }

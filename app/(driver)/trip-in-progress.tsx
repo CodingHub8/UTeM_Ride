@@ -22,6 +22,20 @@ import {
 const DEFAULT_PICKUP = { latitude: 2.3135, longitude: 102.3211 };
 const DEFAULT_DEST = { latitude: 2.2274, longitude: 102.2492 };
 
+function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3; // meters
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 const DARK_MAP_STYLE = [
   { "elementType": "geometry", "stylers": [{ "color": "#242f3e" }] },
   { "elementType": "labels.text.fill", "stylers": [{ "color": "#746855" }] },
@@ -92,6 +106,8 @@ export default function TripInProgressScreen() {
   });
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [passengerId, setPassengerId] = useState('');
+  const [passengerCoord, setPassengerCoord] = useState<{ latitude: number; longitude: number } | null>(null);
+  const autoCompletedRef = useRef(false);
 
   useEffect(() => {
     if (!rideId) return;
@@ -106,6 +122,12 @@ export default function TripInProgressScreen() {
         if (data.destination_coords) {
           setDestCoord({ latitude: data.destination_coords.latitude, longitude: data.destination_coords.longitude });
           gotCoords = true;
+        }
+        if (data.passenger_location) {
+          setPassengerCoord({
+            latitude: data.passenger_location.latitude,
+            longitude: data.passenger_location.longitude,
+          });
         }
         if (Array.isArray(data.route_polyline)) {
           setRoutePoly(data.route_polyline);
@@ -138,6 +160,35 @@ export default function TripInProgressScreen() {
   useEffect(() => {
     if (rideId) startTrip(rideId).catch((e) => console.warn('startTrip error:', e));
   }, [rideId]);
+
+  // Automated arrival detection at destination (<100m proximity check)
+  useEffect(() => {
+    if (!driverCoord || !passengerCoord || !destCoord || completing || autoCompletedRef.current) return;
+
+    const dDist = getDistanceInMeters(
+      driverCoord.latitude,
+      driverCoord.longitude,
+      destCoord.latitude,
+      destCoord.longitude
+    );
+
+    const pDist = getDistanceInMeters(
+      passengerCoord.latitude,
+      passengerCoord.longitude,
+      destCoord.latitude,
+      destCoord.longitude
+    );
+
+    if (dDist < 100 && pDist < 100) {
+      autoCompletedRef.current = true;
+      console.log(`[AutoArrival] Proximity detected! Driver distance: ${dDist.toFixed(1)}m, Passenger distance: ${pDist.toFixed(1)}m. Automatically completing...`);
+      Alert.alert(
+        'Arrival Detected',
+        'Both driver and passenger are within 100 meters of the destination. Auto-completing trip...',
+        [{ text: 'OK', onPress: () => handleCompleteTrip() }]
+      );
+    }
+  }, [driverCoord, passengerCoord, destCoord, completing]);
 
   useEffect(() => {
     let sub: Location.LocationSubscription | null = null;

@@ -56,3 +56,5 @@ hosting/
 # Large binary files (APK exceeds GitHub 100MB limit)
 *.apk
 
+# Archives
+scratch/

@@ -6,10 +6,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Linking } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, where, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { useAuth } from '@/contexts/AuthContext';
-import { cancelRide } from '@/utils/rides';
+import { cancelAndRefundRide, completeTrip, createRideTransactions, parseFare } from '@/utils/rides';
+import * as Location from 'expo-location';
 import ChatModal from '@/components/ChatModal';
 
 const ACTIVE_STATUSES = ['requested', 'accepted', 'arrived', 'in_progress'];
@@ -130,6 +131,121 @@ export default function ActiveRideScreen() {
     }
   }, [driverLoc?.latitude, driverLoc?.longitude]);
 
+  // GPS Location Sharing when status is 'in_progress'
+  useEffect(() => {
+    let sub: Location.LocationSubscription | null = null;
+    let mounted = true;
+
+    if (ride?.id && ride?.status === 'in_progress') {
+      (async () => {
+        const { status: permStatus } = await Location.requestForegroundPermissionsAsync();
+        if (permStatus !== 'granted') return;
+
+        try {
+          sub = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.High,
+              timeInterval: 4000,
+              distanceInterval: 5,
+            },
+            async (loc) => {
+              if (!mounted) return;
+              const coords = {
+                latitude: loc.coords.latitude,
+                longitude: loc.coords.longitude,
+              };
+              const rideRef = doc(db, 'rides', ride.id);
+              await updateDoc(rideRef, {
+                passenger_location: coords,
+              });
+            }
+          );
+        } catch (err) {
+          console.warn('[ActiveRide] GPS Watch error:', err);
+        }
+      })();
+    }
+
+    return () => {
+      mounted = false;
+      if (sub) {
+        sub.remove();
+      }
+    };
+  }, [ride?.id, ride?.status]);
+
+  // Timeout logic (10 mins)
+  useEffect(() => {
+    if (!ride || ride.status !== 'requested') return;
+
+    const checkTimeout = async () => {
+      const createdTime = ride.timestamp || Date.now();
+      const elapsed = Date.now() - createdTime;
+      const TEN_MINUTES_MS = 10 * 60 * 1000;
+
+      if (elapsed >= TEN_MINUTES_MS) {
+        clearInterval(timer);
+        try {
+          const fareAmt = parseFare(ride.fare);
+          await cancelAndRefundRide(
+            ride.id,
+            ride.passenger_id,
+            fareAmt,
+            ride.payment_method || 'cash',
+            ride.payment_label || ''
+          );
+          Alert.alert(
+            'Request Timeout',
+            'No driver accepted your request within 10 minutes. Your ride has been cancelled and any payment has been refunded.',
+            [{ text: 'OK', onPress: () => router.replace('/(passenger)/home') }]
+          );
+        } catch (err) {
+          console.error('[Timeout] Failed to auto-cancel ride:', err);
+          router.replace('/(passenger)/home');
+        }
+      }
+    };
+
+    checkTimeout();
+    const timer = setInterval(checkTimeout, 5000);
+    return () => clearInterval(timer);
+  }, [ride?.id, ride?.status]);
+
+  const handleManualComplete = async () => {
+    if (!ride) return;
+    Alert.alert(
+      'Confirm Arrival',
+      'Are you sure you want to manually confirm that you have arrived at your destination?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: async () => {
+            try {
+              const fareAmt = parseFare(ride.fare);
+              await completeTrip(ride.id);
+              if (ride.driver_id && fareAmt > 0) {
+                await createRideTransactions({
+                  rideId: ride.id,
+                  fare: fareAmt,
+                  driver_id: ride.driver_id,
+                  passenger_id: ride.passenger_id,
+                  passenger_name: ride.passenger_name || 'Passenger',
+                  pickup: ride.pickup_address || 'Pickup',
+                  destination: ride.destination_address || 'Destination',
+                  payment_method: ride.payment_method || 'cash',
+                });
+              }
+              Alert.alert('Trip Completed', 'You have manually confirmed arrival.');
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to complete trip.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const status: string = ride?.status || 'requested';
   const driverAssigned = !!ride?.driver_id;
 
@@ -158,7 +274,14 @@ export default function ActiveRideScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            await cancelRide(activeId);
+            const fareAmt = parseFare(ride?.fare);
+            await cancelAndRefundRide(
+              activeId,
+              ride?.passenger_id || user?.id || 'anonymous',
+              fareAmt,
+              ride?.payment_method || 'cash',
+              ride?.payment_label || ''
+            );
             router.replace('/(passenger)/home');
           } catch (e: any) {
             Alert.alert('Error', e.message || 'Failed to cancel ride.');
@@ -297,6 +420,16 @@ export default function ActiveRideScreen() {
 
         <View style={[styles.divider, dynamicStyles.divider]} />
 
+        {status === 'in_progress' && (
+          <TouchableOpacity
+            style={[styles.completeBtn, { backgroundColor: Colors.success }]}
+            onPress={handleManualComplete}
+          >
+            <Ionicons name="checkmark-done-circle" size={20} color={Colors.white} />
+            <Text style={styles.completeText}>Manually Confirm Arrival</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.bottomRow}>
           <TouchableOpacity
             style={[styles.cancelBtn, isDark && { backgroundColor: Colors.gray900 }]}
@@ -363,4 +496,6 @@ const styles = StyleSheet.create({
   cancelText: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.gray700 },
   sosBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.error, borderRadius: BorderRadius.md, paddingVertical: 14, paddingHorizontal: Spacing.lg },
   sosText: { color: Colors.white, fontWeight: FontWeight.bold, fontSize: FontSize.md },
+  completeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: BorderRadius.md, paddingVertical: 12, marginBottom: Spacing.sm },
+  completeText: { color: Colors.white, fontWeight: FontWeight.bold, fontSize: FontSize.md },
 });

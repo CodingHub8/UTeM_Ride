@@ -65,6 +65,7 @@ export default function PassengerLayout() {
       <Tabs.Screen name="ride-request" options={{ href: null }} />
       <Tabs.Screen name="active-ride" options={{ href: null }} />
       <Tabs.Screen name="payment-history" options={{ href: null }} />
+      <Tabs.Screen name="wallet" options={{ href: null }} />
     </Tabs>
   );
 }

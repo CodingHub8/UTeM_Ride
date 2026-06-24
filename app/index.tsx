@@ -13,6 +13,17 @@ export default function SplashScreen() {
   const subtitleFade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Trigger sandbox database seeding asynchronously
+    import('@/utils/seedData')
+      .then(({ seedDatabaseIfEmpty }) => {
+        seedDatabaseIfEmpty();
+      })
+      .catch((err) => {
+        console.warn('[SplashScreen] Failed to run database seeding:', err);
+      });
+  }, []);
+
+  useEffect(() => {
     // Entrance animations
     Animated.parallel([
       Animated.timing(fadeAnim, {

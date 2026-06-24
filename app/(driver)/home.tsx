@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Switch, Platform, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { subscribeDriverEarnings, EarningsSummary } from '@/utils/earnings';
 import TwoFactorModal from '@/components/TwoFactorModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Default region: UTeM Main Campus, Melaka
 const UTEM_REGION = {
@@ -45,15 +46,37 @@ const DARK_MAP_STYLE = [
 export default function DriverHomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const navigation = useNavigation();
   const { user, refreshProfile } = useAuth();
   const { isDark, theme } = useTheme();
   const [isOnline, setIsOnline] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [rejectedIds, setRejectedIds] = useState<string[]>([]);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [activeRide, setActiveRide] = useState<any | null>(null);
   const [earnings, setEarnings] = useState<EarningsSummary>({ today: 0, week: 0, todayTrips: 0, weekTrips: 0 });
   const [show2FA, setShow2FA] = useState(false);
   const mapRef = useRef<MapView>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const loadRejected = async () => {
+      try {
+        const stored = await AsyncStorage.getItem('rejected_rides_' + user.id);
+        if (stored) {
+          setRejectedIds(JSON.parse(stored));
+        } else {
+          setRejectedIds([]);
+        }
+      } catch (e) {
+        console.warn('Failed to load rejected rides on focus:', e);
+      }
+    };
+
+    loadRejected();
+    const unsubscribeFocus = navigation.addListener('focus', loadRejected);
+    return unsubscribeFocus;
+  }, [user?.id, navigation]);
 
   useEffect(() => {
     if (user && !user.is_2FA_verified) {
@@ -104,7 +127,7 @@ export default function DriverHomeScreen() {
   };
 
   useEffect(() => {
-    if (!isOnline) {
+    if (!isOnline || !user?.id) {
       setPendingCount(0);
       return;
     }
@@ -114,12 +137,19 @@ export default function DriverHomeScreen() {
       where('driver_id', '==', null)
     );
     const unsub = onSnapshot(q, (snap) => {
-      setPendingCount(snap.size);
+      let count = 0;
+      snap.forEach((d) => {
+        const data = d.data();
+        if (data.passenger_id !== user.id && !rejectedIds.includes(d.id)) {
+          count++;
+        }
+      });
+      setPendingCount(count);
     }, (err) => {
       console.error('Driver home pending listener error:', err);
     });
     return unsub;
-  }, [isOnline]);
+  }, [isOnline, user?.id, rejectedIds]);
 
   useEffect(() => {
     (async () => {
@@ -229,6 +259,8 @@ export default function DriverHomeScreen() {
     actionBtnText: { color: isDark ? Colors.white : Colors.gray800 },
     offlineText: { color: isDark ? Colors.gray500 : Colors.gray400 },
     locationFab: { backgroundColor: isDark ? Colors.darkCard : Colors.white },
+    requestTitle: { color: isDark ? Colors.white : Colors.primary },
+    requestSub: { color: isDark ? Colors.gray300 : Colors.gray600 },
   };
 
   return (
@@ -349,10 +381,10 @@ export default function DriverHomeScreen() {
               <Ionicons name="notifications" size={24} color={Colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.requestTitle}>
+              <Text style={[styles.requestTitle, dynamicStyles.requestTitle]}>
                 {pendingCount > 0 ? `${pendingCount} new ride request${pendingCount > 1 ? 's' : ''}` : 'Waiting for requests'}
               </Text>
-              <Text style={styles.requestSub}>
+              <Text style={[styles.requestSub, dynamicStyles.requestSub]}>
                 {pendingCount > 0 ? 'Tap to view and accept' : 'Live ride feed enabled'}
               </Text>
             </View>
@@ -403,10 +435,10 @@ const styles = StyleSheet.create({
   statusDotOnline: { backgroundColor: Colors.success },
   statusLabel: { flex: 1, fontSize: FontSize.md, fontWeight: FontWeight.semibold },
   panel: { borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, padding: Spacing.lg },
-  earningsCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderRadius: BorderRadius.lg, padding: Spacing.lg, marginBottom: Spacing.md },
+  earningsCard: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.md, borderRadius: BorderRadius.lg, padding: Spacing.lg, marginBottom: Spacing.md },
   earningsLabel: { fontSize: FontSize.sm },
   earningsValue: { fontSize: FontSize.hero, fontWeight: FontWeight.bold, marginTop: 4 },
-  earningsRight: { flexDirection: 'row', gap: Spacing.lg },
+  earningsRight: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.lg },
   statItem: { alignItems: 'center' },
   statValue: { fontSize: FontSize.xl, fontWeight: FontWeight.bold },
   statLabel: { fontSize: FontSize.xs, marginTop: 2 },

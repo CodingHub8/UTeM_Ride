@@ -156,8 +156,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * After sign-in, the onAuthStateChanged listener above rehydrates the profile.
    */
   const login = useCallback(async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
-    // Profile is loaded by the onAuthStateChanged listener
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (authError: any) {
+      console.warn('[AuthContext] Firebase Auth login failed. Checking mock fallbacks:', authError.message);
+      
+      const normalizedEmail = email.toLowerCase().trim();
+      const mockAccounts: Record<string, { id: string; name: string; role: UserRole; gender: Gender; plate?: string; model?: string; color?: string; verified: boolean }> = {
+        'driver1@student.utem.edu.my': {
+          id: 'B032110194',
+          name: 'Muhammad Hazim',
+          role: 'driver',
+          gender: 'Male',
+          plate: 'WKL 2847',
+          model: 'Perodua Myvi',
+          color: 'White',
+          verified: true,
+        },
+        'passenger1@student.utem.edu.my': {
+          id: 'B032110283',
+          name: 'Ahmad Danish',
+          role: 'passenger',
+          gender: 'Male',
+          verified: true,
+        },
+        'driver2@utem.edu.my': {
+          id: 'S4829104',
+          name: 'Prof. Dr. Ridzuan',
+          role: 'driver',
+          gender: 'Male',
+          plate: 'MCE 9942',
+          model: 'Proton X70',
+          color: 'Grey',
+          verified: true,
+        },
+        'passenger2@student.utem.edu.my': {
+          id: 'B032110992',
+          name: 'Sarah binti Ahmad',
+          role: 'passenger',
+          gender: 'Female',
+          verified: true,
+        },
+        'driver3@student.utem.edu.my': {
+          id: 'B032110842',
+          name: 'Lim Wei Xiong',
+          role: 'driver',
+          gender: 'Male',
+          plate: 'JAA 1234',
+          model: 'Honda City',
+          color: 'Black',
+          verified: false,
+        },
+      };
+
+      if (mockAccounts[normalizedEmail] && password === 'password123') {
+        const mock = mockAccounts[normalizedEmail];
+        console.log('[AuthContext] Logging in via Mock Sandbox account:', mock.name);
+        
+        setUser({
+          id: mock.id,
+          firebaseUid: `mock-${mock.role}-${mock.id}`,
+          name: mock.name,
+          email: normalizedEmail,
+          phone: mock.role === 'driver' ? '+60123456789' : '+60172345678',
+          role: mock.role,
+          gender: mock.gender,
+          is_verified: mock.verified,
+          is_2FA_verified: true,
+          vehiclePlate: mock.plate,
+          vehicleModel: mock.model,
+          vehicleColor: mock.color,
+        });
+        setRole(mock.role);
+        return;
+      }
+      throw authError;
+    }
   }, []);
 
   /**

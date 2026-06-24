@@ -7,9 +7,27 @@ import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { addDoc, collection, doc, onSnapshot, query, serverTimestamp, Timestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, onSnapshot, query, serverTimestamp, Timestamp, updateDoc, where, getDoc, increment } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
-import { getCurrentLocationAddress, getPlaceAutocomplete, getPlaceDetails } from '@/utils/location';
+import { getCurrentLocationAddress, getPlaceAutocomplete, getPlaceDetails, getDirections } from '@/utils/location';
+
+function calculateHaversineDistance(
+  c1: { latitude: number; longitude: number },
+  c2: { latitude: number; longitude: number }
+): number {
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const R = 6371; // Earth's radius in km
+  const dLat = toRad(c2.latitude - c1.latitude);
+  const dLon = toRad(c2.longitude - c1.longitude);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(c1.latitude)) *
+      Math.cos(toRad(c2.latitude)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
 const UTEM_REGION = {
   latitude: 2.3086,
@@ -89,6 +107,39 @@ export default function CreatePoolScreen() {
       }
     })();
   }, []);
+
+  const [distanceKm, setDistanceKm] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!pickupCoords || !destinationCoords) {
+      setDistanceKm(null);
+      return;
+    }
+    let active = true;
+    (async () => {
+      const directions = await getDirections(
+        { lat: pickupCoords.latitude, lng: pickupCoords.longitude },
+        { lat: destinationCoords.latitude, lng: destinationCoords.longitude }
+      );
+      if (!active) return;
+      if (directions && directions.distanceValue) {
+        setDistanceKm(directions.distanceValue / 1000);
+      } else {
+        // Fallback: Haversine distance
+        const distance = calculateHaversineDistance(pickupCoords, destinationCoords);
+        setDistanceKm(distance);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [pickupCoords, destinationCoords]);
+
+  const calculatedPricePerSeat = useMemo(() => {
+    if (distanceKm === null) return 0;
+    const totalFare = 3.50 + distanceKm * 0.50;
+    return parseFloat((totalFare / seats).toFixed(2));
+  }, [distanceKm, seats]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -171,6 +222,62 @@ export default function CreatePoolScreen() {
 
   const dateLabel = `${scheduled.getFullYear()}-${pad(scheduled.getMonth() + 1)}-${pad(scheduled.getDate())}`;
   const timeLabel = `${pad(scheduled.getHours())}:${pad(scheduled.getMinutes())}`;
+
+  const handleAcceptBooking = async (pool: any, booking: any) => {
+    try {
+      const remainingSeats = pool.seats_total - pool.seats_booked;
+      if (remainingSeats <= 0) {
+        Alert.alert('Pool Full', 'This pool is already full.');
+        return;
+      }
+
+      const bookingRef = doc(db, 'carpool_slots', pool.id, 'bookings', booking.passenger_id);
+      await updateDoc(bookingRef, {
+        status: 'confirmed',
+        updated_at: serverTimestamp(),
+      });
+
+      const nextBooked = (pool.seats_booked || 0) + 1;
+      await updateDoc(doc(db, 'carpool_slots', pool.id), {
+        seats_booked: increment(1),
+        status: nextBooked >= pool.seats_total ? 'full' : 'open',
+        updated_at: serverTimestamp(),
+      });
+
+      Alert.alert('Success', `Accepted ${booking.passenger_name || 'passenger'}'s request.`);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to accept passenger.');
+    }
+  };
+
+  const handleRejectBooking = async (pool: any, booking: any) => {
+    try {
+      const bookingRef = doc(db, 'carpool_slots', pool.id, 'bookings', booking.passenger_id);
+      await updateDoc(bookingRef, {
+        status: 'rejected',
+        updated_at: serverTimestamp(),
+      });
+
+      // If they paid via FPX/Card, write a refund transaction to their e-wallet balance
+      if (booking.payment_method !== 'cash') {
+        const amount = parseFloat(pool.price_per_seat) || 0;
+        await addDoc(collection(db, 'transactions'), {
+          user_id: booking.passenger_id,
+          amount: amount,
+          payment_method: booking.payment_method,
+          transaction_type: 'refund',
+          label: `Refund: Carpool seat request rejected by driver`,
+          role: 'passenger',
+          status: 'completed',
+          created_at: serverTimestamp(),
+        });
+      }
+
+      Alert.alert('Success', `Rejected ${booking.passenger_name || 'passenger'}'s request.`);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to reject passenger.');
+    }
+  };
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? Colors.darkBg : Colors.gray50 },
@@ -289,7 +396,7 @@ export default function CreatePoolScreen() {
                 <TouchableOpacity onPress={() => adjust('day', -1)} style={styles.adjustBtn}>
                   <Ionicons name="chevron-back" size={18} color={Colors.primary} />
                 </TouchableOpacity>
-                <Text style={[dynamicStyles.text, { fontWeight: FontWeight.semibold }]}>{dateLabel}</Text>
+                <Text style={[dynamicStyles.text, { fontWeight: FontWeight.semibold, textAlign: 'center', flex: 1 }]}>{dateLabel}</Text>
                 <TouchableOpacity onPress={() => adjust('day', 1)} style={styles.adjustBtn}>
                   <Ionicons name="chevron-forward" size={18} color={Colors.primary} />
                 </TouchableOpacity>
@@ -301,7 +408,7 @@ export default function CreatePoolScreen() {
                 <TouchableOpacity onPress={() => adjust('hour', -1)} style={styles.adjustBtn}>
                   <Ionicons name="chevron-back" size={18} color={Colors.primary} />
                 </TouchableOpacity>
-                <Text style={[dynamicStyles.text, { fontWeight: FontWeight.semibold }]}>{timeLabel}</Text>
+                <Text style={[dynamicStyles.text, { fontWeight: FontWeight.semibold, textAlign: 'center', flex: 1 }]}>{timeLabel}</Text>
                 <TouchableOpacity onPress={() => adjust('hour', 1)} style={styles.adjustBtn}>
                   <Ionicons name="chevron-forward" size={18} color={Colors.primary} />
                 </TouchableOpacity>
@@ -314,14 +421,11 @@ export default function CreatePoolScreen() {
         <View style={[styles.card, dynamicStyles.card]}>
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Price per seat (RM)</Text>
-            <TextInput
-              style={[styles.input, dynamicStyles.input]}
-              placeholder="e.g. 2.50"
-              placeholderTextColor={Colors.gray500}
-              keyboardType="decimal-pad"
-              value={pricePerSeat}
-              onChangeText={setPricePerSeat}
-            />
+            <View style={[styles.input, dynamicStyles.input, { justifyContent: 'center', opacity: 0.8 }]}>
+              <Text style={[dynamicStyles.text, { fontWeight: FontWeight.bold }]}>
+                {calculatedPricePerSeat > 0 ? `RM ${calculatedPricePerSeat.toFixed(2)}` : 'RM -- (Select route first)'}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -378,9 +482,8 @@ export default function CreatePoolScreen() {
               Alert.alert('Missing destination', 'Please enter a destination.');
               return;
             }
-            const numericPrice = parseFloat(pricePerSeat);
-            if (isNaN(numericPrice) || numericPrice <= 0) {
-              Alert.alert('Invalid price', 'Enter a valid price per seat.');
+            if (calculatedPricePerSeat <= 0) {
+              Alert.alert('Missing route or price', 'Please select a valid pickup and destination route to automatically calculate the seat price.');
               return;
             }
             if (scheduled.getTime() < Date.now() + 5 * 60 * 1000) {
@@ -402,7 +505,7 @@ export default function CreatePoolScreen() {
                 date_time: Timestamp.fromDate(scheduled),
                 seats_total: seats,
                 seats_booked: 0,
-                price_per_seat: numericPrice,
+                price_per_seat: calculatedPricePerSeat,
                 gender_matching: genderMatching,
                 driver_gender: user.gender,
                 status: 'open',
@@ -411,7 +514,6 @@ export default function CreatePoolScreen() {
               setDestination('');
               setSelectedPlace(null);
               setDestinationCoords(null);
-              setPricePerSeat('');
               Alert.alert('Success', 'Pool slot published.');
             } catch (e: any) {
               Alert.alert('Error', e.message || 'Failed to publish pool slot.');
@@ -446,6 +548,8 @@ export default function CreatePoolScreen() {
                 </View>
               </View>
               <View style={[styles.divider, dynamicStyles.divider]} />
+              
+              {/* Refactored layout to prevent overflow clipping on narrow screens */}
               <View style={styles.poolMeta}>
                 <View style={styles.poolMetaItem}>
                   <Ionicons name="people" size={16} color={Colors.gray400} />
@@ -455,33 +559,81 @@ export default function CreatePoolScreen() {
                   <Ionicons name="cash-outline" size={16} color={Colors.gray400} />
                   <Text style={[styles.rowSub, dynamicStyles.subText]}>RM {Number(pool.price_per_seat).toFixed(2)}/seat</Text>
                 </View>
+              </View>
+
+              <View style={styles.poolActionsRow}>
                 {pool.status === 'open' && (
-                  <TouchableOpacity style={styles.cancelPoolBtn} onPress={() => cancelPool(pool.id)}>
-                    <Ionicons name="close-circle-outline" size={16} color={Colors.error} />
-                    <Text style={styles.cancelPoolText}>Cancel</Text>
+                  <TouchableOpacity style={[styles.poolActionBtn, styles.poolActionBtnCancel]} onPress={() => cancelPool(pool.id)}>
+                    <Ionicons name="close-circle-outline" size={14} color={Colors.error} />
+                    <Text style={styles.cancelPoolText}>Cancel Pool</Text>
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity style={styles.cancelPoolBtn} onPress={() => setExpandedPoolId(expandedPoolId === pool.id ? null : pool.id)}>
-                  <Ionicons name="people-outline" size={16} color={Colors.primary} />
-                  <Text style={[styles.cancelPoolText, { color: Colors.primary }]}>Passengers</Text>
+                <TouchableOpacity style={[styles.poolActionBtn, styles.poolActionBtnPass]} onPress={() => setExpandedPoolId(expandedPoolId === pool.id ? null : pool.id)}>
+                  <Ionicons name="people-outline" size={14} color={Colors.primary} />
+                  <Text style={[styles.cancelPoolText, { color: Colors.primary }]}>
+                    {expandedPoolId === pool.id ? 'Hide Passengers' : 'Passengers'}
+                  </Text>
                 </TouchableOpacity>
               </View>
+
               {expandedPoolId === pool.id && (
                 <View style={{ marginTop: Spacing.sm }}>
                   {(poolBookings[pool.id] || []).length === 0 ? (
                     <Text style={[styles.rowSub, dynamicStyles.subText]}>No passengers joined yet.</Text>
                   ) : (
                     (poolBookings[pool.id] || []).map((b) => (
-                      <View key={b.id} style={[styles.passengerRow, { borderColor: isDark ? Colors.darkBorder : Colors.gray200 }]}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.poolDest, dynamicStyles.text]}>{b.passenger_name || b.passenger_id}</Text>
-                          <Text style={[styles.rowSub, dynamicStyles.subText]}>{b.passenger_phone || '—'} · {b.payment_method?.toUpperCase()} · {b.payment_status || b.status}</Text>
+                      <View key={b.id} style={[styles.passengerRow, { borderColor: isDark ? Colors.darkBorder : Colors.gray200, flexDirection: 'column', alignItems: 'stretch' }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.poolDest, dynamicStyles.text]}>{b.passenger_name || b.passenger_id}</Text>
+                            <Text style={[styles.rowSub, dynamicStyles.subText]}>
+                              {b.passenger_phone || '—'} · {b.payment_method?.toUpperCase()} · {b.status?.toUpperCase()}
+                            </Text>
+                          </View>
+                          {b.passenger_phone ? (
+                            <TouchableOpacity onPress={() => Linking.openURL(`tel:${b.passenger_phone}`)} style={{ padding: 4 }}>
+                              <Ionicons name="call" size={18} color={Colors.primary} />
+                            </TouchableOpacity>
+                          ) : null}
                         </View>
-                        {b.passenger_phone ? (
-                          <TouchableOpacity onPress={() => Linking.openURL(`tel:${b.passenger_phone}`)}>
-                            <Ionicons name="call" size={18} color={Colors.primary} />
-                          </TouchableOpacity>
-                        ) : null}
+                        
+                        {/* Passenger Pickup Address Details */}
+                        <View style={{ marginTop: 6, backgroundColor: isDark ? Colors.gray900 : Colors.gray50, padding: 8, borderRadius: BorderRadius.sm }}>
+                          <Text style={{ fontSize: 9, color: Colors.gray500, fontWeight: FontWeight.bold }}>PICKUP ADDRESS</Text>
+                          <Text style={[styles.rowSub, dynamicStyles.text, { marginTop: 2 }]} numberOfLines={2}>
+                            {b.pickup_address || 'Not specified'}
+                          </Text>
+                        </View>
+
+                        {/* Driver Decisions (Accept / Reject) */}
+                        {b.status === 'pending' && (
+                          <View style={{ flexDirection: 'row', gap: Spacing.sm, marginTop: 10 }}>
+                            <TouchableOpacity
+                              style={[styles.bookingActionBtn, { backgroundColor: Colors.error + '15', borderColor: Colors.error + '30' }]}
+                              onPress={() => handleRejectBooking(pool, b)}
+                            >
+                              <Ionicons name="close" size={14} color={Colors.error} />
+                              <Text style={{ color: Colors.error, fontSize: FontSize.xs, fontWeight: 'bold' }}>Reject</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.bookingActionBtn, { backgroundColor: Colors.success + '15', borderColor: Colors.success + '30' }]}
+                              onPress={() => handleAcceptBooking(pool, b)}
+                            >
+                              <Ionicons name="checkmark" size={14} color={Colors.success} />
+                              <Text style={{ color: Colors.success, fontSize: FontSize.xs, fontWeight: 'bold' }}>Accept</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                        {b.status === 'confirmed' && (
+                          <View style={{ marginTop: 8, alignSelf: 'flex-start', backgroundColor: Colors.success + '15', paddingHorizontal: 8, paddingVertical: 4, borderRadius: BorderRadius.sm }}>
+                            <Text style={{ color: Colors.success, fontSize: 10, fontWeight: 'bold' }}>✓ CONFIRMED</Text>
+                          </View>
+                        )}
+                        {b.status === 'rejected' && (
+                          <View style={{ marginTop: 8, alignSelf: 'flex-start', backgroundColor: Colors.error + '15', paddingHorizontal: 8, paddingVertical: 4, borderRadius: BorderRadius.sm }}>
+                            <Text style={{ color: Colors.error, fontSize: 10, fontWeight: 'bold' }}>✗ REJECTED</Text>
+                          </View>
+                        )}
                       </View>
                     ))
                   )}
@@ -522,11 +674,16 @@ const styles = StyleSheet.create({
   poolDest: { fontSize: FontSize.md, fontWeight: FontWeight.bold },
   statusPill: { borderRadius: BorderRadius.full, paddingHorizontal: Spacing.sm, paddingVertical: 4, marginLeft: Spacing.sm },
   statusText: { fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5 },
-  poolMeta: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  poolMeta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.md },
   poolMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  cancelPoolBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
+  cancelPoolBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   cancelPoolText: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.error },
   passengerRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: BorderRadius.md, padding: Spacing.sm, marginBottom: Spacing.xs },
+  poolActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginTop: Spacing.sm },
+  poolActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderWidth: 1, borderRadius: BorderRadius.md },
+  poolActionBtnCancel: { backgroundColor: Colors.error + '10', borderColor: Colors.error + '30' },
+  poolActionBtnPass: { backgroundColor: Colors.primary + '10', borderColor: Colors.primary + '30' },
+  bookingActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 8, borderWidth: 1, borderRadius: BorderRadius.sm },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   searchInput: { flex: 1, fontSize: FontSize.md },
   suggestBox: { borderWidth: 1, borderRadius: BorderRadius.md, marginTop: Spacing.xs, overflow: 'hidden' },

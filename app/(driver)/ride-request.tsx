@@ -8,7 +8,8 @@ import { db } from '@/utils/firebase';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { acceptRide } from '@/utils/rides';
+import { acceptRide, cancelAndRefundRide, parseFare } from '@/utils/rides';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface PendingRide {
   id: string;
@@ -21,7 +22,9 @@ interface PendingRide {
   distance?: string;
   duration?: string;
   payment_label?: string;
+  payment_method?: string;
   timestamp?: number;
+  scheduled_time?: string | null;
 }
 
 export default function DriverRideRequestScreen() {
@@ -33,8 +36,26 @@ export default function DriverRideRequestScreen() {
   const [rides, setRides] = useState<PendingRide[]>([]);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState<string | null>(null);
+  const [rejectedIds, setRejectedIds] = useState<string[]>([]);
+
+  // Load rejected ride ids from AsyncStorage at startup
+  useEffect(() => {
+    if (!user?.id) return;
+    const loadRejected = async () => {
+      try {
+        const stored = await AsyncStorage.getItem('rejected_rides_' + user.id);
+        if (stored) {
+          setRejectedIds(JSON.parse(stored));
+        }
+      } catch (e) {
+        console.warn('Failed to load rejected rides:', e);
+      }
+    };
+    loadRejected();
+  }, [user?.id]);
 
   useEffect(() => {
+    if (!user?.id) return;
     const q = query(
       collection(db, 'rides'),
       where('status', '==', 'requested'),
@@ -44,7 +65,12 @@ export default function DriverRideRequestScreen() {
       q,
       (snap) => {
         const list: PendingRide[] = [];
-        snap.forEach((d) => list.push({ id: d.id, ...(d.data() as any) }));
+        snap.forEach((d) => {
+          const data = d.data() as any;
+          if (data.passenger_id !== user.id && !rejectedIds.includes(d.id)) {
+            list.push({ id: d.id, ...data });
+          }
+        });
         list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
         setRides(list);
         setLoading(false);
@@ -55,7 +81,32 @@ export default function DriverRideRequestScreen() {
       }
     );
     return unsub;
-  }, []);
+  }, [user?.id, rejectedIds]);
+
+  const handleDecline = (ride: PendingRide) => {
+    Alert.alert(
+      'Decline Request',
+      'Are you sure to reject this request?',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes',
+          onPress: async () => {
+            try {
+              const updated = [...rejectedIds, ride.id];
+              setRejectedIds(updated);
+              if (user?.id) {
+                await AsyncStorage.setItem('rejected_rides_' + user.id, JSON.stringify(updated));
+              }
+              Alert.alert('Request Declined', 'The request has been rejected successfully.');
+            } catch (err: any) {
+              Alert.alert('Error', 'Failed to decline request.');
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const handleAccept = async (ride: PendingRide) => {
     if (!user) {
@@ -151,6 +202,15 @@ export default function DriverRideRequestScreen() {
           </View>
         </View>
 
+        {item.scheduled_time && (
+          <View style={[styles.scheduleBadge, { backgroundColor: isDark ? '#FFB80015' : '#FFB80010', borderColor: '#FFB80040' }]}>
+            <Ionicons name="calendar-outline" size={16} color={Colors.accentDark} />
+            <Text style={[styles.scheduleBadgeText, { color: isDark ? Colors.accentLight : Colors.accentDark }]}>
+              Scheduled: {item.scheduled_time}
+            </Text>
+          </View>
+        )}
+
         <View style={[styles.routeCard, dynamicStyles.routeCard]}>
           <View style={styles.routeRow}>
             <View style={styles.routeMarkers}>
@@ -198,9 +258,9 @@ export default function DriverRideRequestScreen() {
         </View>
 
         <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.declineBtn} onPress={() => router.back()} disabled={isAccepting}>
+          <TouchableOpacity style={styles.declineBtn} onPress={() => handleDecline(item)} disabled={isAccepting}>
             <Ionicons name="close" size={22} color={Colors.error} />
-            <Text style={styles.declineText}>Skip</Text>
+            <Text style={styles.declineText}>Reject</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.acceptBtn, isAccepting && { opacity: 0.7 }]}
@@ -290,4 +350,18 @@ const styles = StyleSheet.create({
   declineText: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.error },
   acceptBtn: { flex: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.success, borderRadius: BorderRadius.lg, paddingVertical: 14 },
   acceptText: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.white },
+  scheduleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  scheduleBadgeText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+  },
 });

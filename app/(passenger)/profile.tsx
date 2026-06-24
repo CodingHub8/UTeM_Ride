@@ -48,21 +48,16 @@ export default function PassengerProfileScreen() {
         <ProfileRow icon="people-outline" label="Gender" value={user?.gender ?? 'Male'} isDark={isDark} last />
       </View>
 
-      {/* Payment */}
-      <Text style={styles.sectionTitle}>Payment</Text>
+      {/* Payment & E-Wallet */}
+      <Text style={styles.sectionTitle}>Payment & E-Wallet</Text>
       <View style={[styles.card, dynamicStyles.card]}>
+        <TouchableOpacity style={[styles.addBtn, { borderBottomWidth: 1, borderBottomColor: isDark ? Colors.darkBorder : Colors.gray100 }]} onPress={() => router.push('/(passenger)/wallet' as never)}>
+          <Ionicons name="wallet-outline" size={20} color={Colors.primary} />
+          <Text style={styles.addBtnText}>My Passenger E-Wallet</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/(passenger)/payment-history' as never)}>
           <Ionicons name="receipt-outline" size={20} color={Colors.primary} />
           <Text style={styles.addBtnText}>Payment History & Receipts</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.sectionTitle}>Payment Methods</Text>
-      <View style={[styles.card, dynamicStyles.card]}>
-        <ProfileRow icon="wallet-outline" label="Cash" value="Default" isDark={isDark} />
-        <TouchableOpacity style={styles.addBtn}>
-          <Ionicons name="add-circle-outline" size={20} color={Colors.primary} />
-          <Text style={styles.addBtnText}>Add Payment Method</Text>
         </TouchableOpacity>
       </View>
 

@@ -81,12 +81,26 @@ export default function WalletScreen() {
       });
       docs.forEach((doc) => {
         const data = doc.data();
+
+        // Exclude passenger role transactions
+        if (data.role === 'passenger') return;
+        if (!data.role) {
+          // Fallback filtering for older seeded/unlabeled documents
+          if (data.transaction_type === 'topup' || data.transaction_type === 'carpool_booking' || data.transaction_type === 'refund') return;
+          if (data.transaction_type === 'fare_payment' && data.amount < 0) return;
+        }
+
+        const isCash = data.payment_method === 'cash';
+        const displayAmt = isCash
+          ? `RM ${(data.cash_amount || 0).toFixed(2)} (Cash)`
+          : (data.amount < 0 ? '-' : '') + 'RM ' + Math.abs(data.amount).toFixed(2);
+
         txs.push({
           id: doc.id,
           type: data.transaction_type === 'withdrawal' ? 'withdrawal' : 'trip',
           label: data.label || (data.transaction_type === 'withdrawal' ? 'Withdrawal' : 'Ride Earnings'),
-          amount: (data.amount < 0 ? '-' : '') + 'RM ' + Math.abs(data.amount).toFixed(2),
-          numericAmount: data.amount,
+          amount: displayAmt,
+          numericAmount: data.amount || 0,
           time: data.created_at ? new Date(data.created_at.seconds * 1000).toLocaleString() : 'Just now',
           route: data.route,
           passenger: data.passenger,
@@ -121,7 +135,7 @@ export default function WalletScreen() {
   }, [user]);
 
   // Calculate live e-wallet balance
-  const walletBalance = transactions.reduce((acc, tx) => acc + tx.numericAmount, 0);
+  const walletBalance = Math.max(0, transactions.reduce((acc, tx) => acc + tx.numericAmount, 0));
 
   // Daily statistics derived dynamically
   const todayTripsCount = transactions.filter(t => t.type === 'trip' && t.time.includes(new Date().toLocaleDateString())).length;
@@ -206,6 +220,7 @@ export default function WalletScreen() {
           payment_method: 'fpx',
           transaction_type: 'withdrawal',
           label: `Withdrawal to ${connectedBank.name}`,
+          role: 'driver',
           status: 'completed',
           created_at: serverTimestamp()
         });
