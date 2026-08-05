@@ -107,7 +107,7 @@ async function getUserPushToken(userId: string): Promise<string | null> {
   return null;
 }
 
-type RideEvent = 'accepted' | 'arrived' | 'in_progress' | 'completed' | 'cancelled' | 'new_request';
+type RideEvent = 'accepted' | 'arrived' | 'in_progress' | 'completed' | 'cancelled' | 'new_request' | 'pool_join' | 'payment_received';
 
 const MESSAGES: Record<RideEvent, { title: string; body: string }> = {
   accepted: { title: 'Driver found', body: 'Your driver is on the way to the pickup point.' },
@@ -116,6 +116,8 @@ const MESSAGES: Record<RideEvent, { title: string; body: string }> = {
   completed: { title: 'Trip completed', body: 'Thanks for riding with UTeM Ride.' },
   cancelled: { title: 'Ride cancelled', body: 'This ride has been cancelled.' },
   new_request: { title: 'New ride request', body: 'A passenger nearby is requesting a ride.' },
+  pool_join: { title: 'Carpool Update', body: 'Your carpool request has been updated.' },
+  payment_received: { title: 'Payment Received', body: 'Your payment / transaction has been processed successfully.' },
 };
 
 export async function notifyUser(
@@ -123,10 +125,16 @@ export async function notifyUser(
   event: RideEvent,
   data?: Record<string, any>
 ) {
-  const token = await getUserPushToken(userId);
-  if (!token) return;
   const msg = MESSAGES[event];
-  await sendExpoPush(token, msg.title, msg.body, { event, ...data });
+  if (!msg) return;
+  
+  // Trigger local notification first for instant UI response
+  await presentLocalNotification(msg.title, msg.body);
+  
+  const token = await getUserPushToken(userId);
+  if (token) {
+    await sendExpoPush(token, msg.title, msg.body, { event, ...data });
+  }
 }
 
 export async function presentLocalNotification(title: string, body: string) {
@@ -137,5 +145,18 @@ export async function presentLocalNotification(title: string, body: string) {
     });
   } catch (e) {
     console.warn('presentLocalNotification error:', e);
+  }
+}
+
+export async function sendUserNotification(
+  userId: string,
+  title: string,
+  body: string,
+  event: string = 'pool_join'
+) {
+  await presentLocalNotification(title, body);
+  const token = await getUserPushToken(userId);
+  if (token) {
+    await sendExpoPush(token, title, body, { event });
   }
 }

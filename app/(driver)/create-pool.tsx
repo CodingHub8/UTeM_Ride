@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { addDoc, collection, doc, onSnapshot, query, serverTimestamp, Timestamp, updateDoc, where, getDoc, increment } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { getCurrentLocationAddress, getPlaceAutocomplete, getPlaceDetails, getDirections } from '@/utils/location';
+import { sendUserNotification } from '@/utils/notifications';
 
 function calculateHaversineDistance(
   c1: { latitude: number; longitude: number },
@@ -58,7 +59,7 @@ export default function CreatePoolScreen() {
   const [pickup, setPickup] = useState('');
   const [pricePerSeat, setPricePerSeat] = useState('');
   const [seats, setSeats] = useState(3);
-  const [genderMatching, setGenderMatching] = useState(false);
+  const [genderMatching, setGenderMatching] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   const [destinationCoords, setDestinationCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -217,6 +218,20 @@ export default function CreatePoolScreen() {
     if (kind === 'day') next.setDate(next.getDate() + delta);
     if (kind === 'hour') next.setHours(next.getHours() + delta);
     if (kind === 'min') next.setMinutes(next.getMinutes() + delta * 15);
+
+    // Block past dates/times
+    if (next.getTime() < Date.now() + 5 * 60 * 1000) {
+      Alert.alert('Past Time Restriction', 'You cannot schedule a carpool for a past date or time. Please pick a future time.');
+      return;
+    }
+
+    // Block hours outside 7:30 AM (450 min) to 10:30 PM (1350 min)
+    const totalMin = next.getHours() * 60 + next.getMinutes();
+    if (totalMin < 450 || totalMin > 1350) {
+      Alert.alert('Operating Hours Notice', 'Carpools can only be scheduled between 7:30 AM and 10:30 PM.');
+      return;
+    }
+
     setScheduled(next);
   };
 
@@ -243,6 +258,32 @@ export default function CreatePoolScreen() {
         status: nextBooked >= pool.seats_total ? 'full' : 'open',
         updated_at: serverTimestamp(),
       });
+
+      // Write driver earnings transaction record
+      const seatPrice = parseFloat(pool.price_per_seat) || 0;
+      if (seatPrice > 0 && user?.id) {
+        await addDoc(collection(db, 'transactions'), {
+          user_id: user.id,
+          amount: seatPrice,
+          payment_method: booking.payment_method || 'cash',
+          transaction_type: 'carpool_earning',
+          label: `Carpool Earning from ${booking.passenger_name || 'Passenger'}`,
+          role: 'driver',
+          status: 'completed',
+          ride_id: pool.id,
+          created_at: serverTimestamp(),
+        });
+      }
+
+      // Notify passenger
+      if (booking.passenger_id) {
+        await sendUserNotification(
+          booking.passenger_id,
+          'Carpool Request Accepted! 🎉',
+          `Driver ${user?.name || 'Driver'} accepted your request to join pool.`,
+          'pool_join'
+        );
+      }
 
       Alert.alert('Success', `Accepted ${booking.passenger_name || 'passenger'}'s request.`);
     } catch (e: any) {
@@ -271,6 +312,15 @@ export default function CreatePoolScreen() {
           status: 'completed',
           created_at: serverTimestamp(),
         });
+      }
+
+      if (booking.passenger_id) {
+        await sendUserNotification(
+          booking.passenger_id,
+          'Carpool Join Request Update',
+          `Driver ${user?.name || 'Driver'} rejected your request to join pool. You can update your pickup address and try again.`,
+          'pool_join'
+        );
       }
 
       Alert.alert('Success', `Rejected ${booking.passenger_name || 'passenger'}'s request.`);
@@ -491,6 +541,22 @@ export default function CreatePoolScreen() {
               return;
             }
 
+            // 10-minute carpool collision check (Requirement 18)
+            const selectedTimeMs = scheduled.getTime();
+            const collision = myPools.some((p) => {
+              if (p.status === 'cancelled') return false;
+              const poolTimeMs = p.date_time?.toMillis?.() || 0;
+              return Math.abs(poolTimeMs - selectedTimeMs) < 10 * 60 * 1000;
+            });
+
+            if (collision) {
+              Alert.alert(
+                'Time Collision Notice',
+                'You have created a carpool for the selected time. Please select a time at least 10 minutes apart from the existing pool.'
+              );
+              return;
+            }
+
             setSubmitting(true);
             try {
               await addDoc(collection(db, 'carpool_slots'), {
@@ -601,7 +667,7 @@ export default function CreatePoolScreen() {
                         <View style={{ marginTop: 6, backgroundColor: isDark ? Colors.gray900 : Colors.gray50, padding: 8, borderRadius: BorderRadius.sm }}>
                           <Text style={{ fontSize: 9, color: Colors.gray500, fontWeight: FontWeight.bold }}>PICKUP ADDRESS</Text>
                           <Text style={[styles.rowSub, dynamicStyles.text, { marginTop: 2 }]} numberOfLines={2}>
-                            {b.pickup_address || 'Not specified'}
+                            {b.pickup_address || b.pickup || 'Not specified'}
                           </Text>
                         </View>
 

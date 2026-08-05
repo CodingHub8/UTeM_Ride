@@ -5,7 +5,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/utils/firebase';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -39,12 +42,12 @@ export default function RegisterScreen() {
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const isValidFormat = emailRegex.test(email);
-    const endsWithUtem = email.endsWith('@student.utem.edu.my') || email.endsWith('@utem.edu.my');
+    const endsWithUtem = email.endsWith('@student.utem.edu.my') || email.endsWith('@siswa.utem.edu.my') || email.endsWith('@utem.edu.my');
     
     if (!isValidFormat) {
       setEmailError('Enter a valid email address');
     } else if (!endsWithUtem) {
-      setEmailError('Only use UTeM provided email domains (@student.utem.edu.my or @utem.edu.my)');
+      setEmailError('Only use UTeM provided email domains (@siswa.utem.edu.my, @student.utem.edu.my, or @utem.edu.my)');
     } else {
       setEmailError('');
     }
@@ -122,13 +125,29 @@ export default function RegisterScreen() {
     if (!isValid) return;
     setLoading(true);
     try {
+      // Extract matric ID from front of email (e.g. B032410000 from B032410000@siswa.utem.edu.my)
+      const matricId = email.split('@')[0].toUpperCase().trim();
+      const userSnap = await getDoc(doc(db, 'users', matricId));
+
+      if (userSnap.exists()) {
+        Alert.alert(
+          'Account Already Exists',
+          `An account with Matric/Staff ID "${matricId}" is already registered.\n\nYou cannot register again with a different email domain (e.g. @siswa.utem.edu.my vs @student.utem.edu.my).\n\nPlease sign in with your existing account.`,
+          [
+            { text: 'Sign In', onPress: () => router.replace('/(auth)/login') },
+            { text: 'OK' },
+          ]
+        );
+        return;
+      }
+
       // Navigate to the next step: document upload (name will be extracted via OCR)
       router.push({
         pathname: '/(auth)/document-upload' as any,
         params: { email, phone, gender, password }
       });
-    } catch {
-      // error handling
+    } catch (err: any) {
+      Alert.alert('Registration Error', err.message || 'Failed to check account status.');
     } finally {
       setLoading(false);
     }
@@ -181,7 +200,7 @@ export default function RegisterScreen() {
               style={styles.suggestionsScroll}
               contentContainerStyle={styles.suggestionsContainer}
             >
-              {['@student.utem.edu.my', 'student.utem.edu.my', '@utem.edu.my', 'utem.edu.my'].map((suggestion) => (
+              {['@siswa.utem.edu.my', 'siswa.utem.edu.my', '@student.utem.edu.my', 'student.utem.edu.my', '@utem.edu.my', 'utem.edu.my'].map((suggestion) => (
                 <TouchableOpacity
                   key={suggestion}
                   style={[styles.suggestionChip, { backgroundColor: isDark ? Colors.gray800 : Colors.gray100 }]}
@@ -194,7 +213,7 @@ export default function RegisterScreen() {
                     const newEmail = `${localPart}${cleanSuggestion}`;
                     setEmail(newEmail);
                     
-                    const endsWithUtem = newEmail.endsWith('@student.utem.edu.my') || newEmail.endsWith('@utem.edu.my');
+                    const endsWithUtem = newEmail.endsWith('@siswa.utem.edu.my') || newEmail.endsWith('@student.utem.edu.my') || newEmail.endsWith('@utem.edu.my');
                     if (!endsWithUtem) {
                       setEmailError('Only use UTeM provided email domains');
                     } else {

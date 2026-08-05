@@ -41,6 +41,13 @@ export default function DriverLayout() {
         }}
       />
       <Tabs.Screen
+        name="pool-requests"
+        options={{
+          title: 'Pool Requests',
+          tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="wallet"
         options={{
           title: 'Wallet',

@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { cancelAndRefundRide, completeTrip, createRideTransactions, parseFare } from '@/utils/rides';
 import * as Location from 'expo-location';
 import ChatModal from '@/components/ChatModal';
+import RatingModal from '@/components/RatingModal';
 
 const ACTIVE_STATUSES = ['requested', 'accepted', 'arrived', 'in_progress'];
 
@@ -71,6 +72,22 @@ export default function ActiveRideScreen() {
   const [ride, setRide] = useState<any>(null);
   const [completed, setCompleted] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+
+  const handleSosPress = () => {
+    Alert.alert(
+      'Emergency Call — SOS',
+      'Do you want to call UTeM Campus Security (Keselamatan UTeM)?\n\nHotline: 06-270 1222',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Call Security (06-270 1222)',
+          style: 'destructive',
+          onPress: () => Linking.openURL('tel:062701222'),
+        },
+      ]
+    );
+  };
 
   useEffect(() => {
     if (rideId) {
@@ -236,7 +253,7 @@ export default function ActiveRideScreen() {
                   payment_method: ride.payment_method || 'cash',
                 });
               }
-              Alert.alert('Trip Completed', 'You have manually confirmed arrival.');
+              Alert.alert('Trip Completed', 'You have confirmed your arrival.');
             } catch (err: any) {
               Alert.alert('Error', err.message || 'Failed to complete trip.');
             }
@@ -426,23 +443,55 @@ export default function ActiveRideScreen() {
             onPress={handleManualComplete}
           >
             <Ionicons name="checkmark-done-circle" size={20} color={Colors.white} />
-            <Text style={styles.completeText}>Manually Confirm Arrival</Text>
+            <Text style={styles.completeText}>Confirm Arrival</Text>
           </TouchableOpacity>
         )}
 
-        <View style={styles.bottomRow}>
-          <TouchableOpacity
-            style={[styles.cancelBtn, isDark && { backgroundColor: Colors.gray900 }]}
-            onPress={handleCancel}
-            disabled={status === 'in_progress' || status === 'completed'}
-          >
-            <Text style={[styles.cancelText, dynamicStyles.subText]}>Cancel Ride</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.sosBtn}>
-            <Ionicons name="alert-circle" size={20} color={Colors.white} />
-            <Text style={styles.sosText}>SOS</Text>
-          </TouchableOpacity>
-        </View>
+        {status === 'completed' || completed ? (
+          <View style={{ gap: 10, width: '100%', marginTop: Spacing.sm }}>
+            <TouchableOpacity
+              style={{
+                backgroundColor: Colors.primary,
+                paddingVertical: 14,
+                borderRadius: BorderRadius.md,
+                alignItems: 'center',
+                flexDirection: 'row',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+              onPress={() => setShowRatingModal(true)}
+            >
+              <Ionicons name="star" size={20} color={Colors.white} />
+              <Text style={{ color: Colors.white, fontWeight: 'bold', fontSize: FontSize.sm }}>Rate Driver</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                paddingVertical: 12,
+                borderRadius: BorderRadius.md,
+                alignItems: 'center',
+                backgroundColor: isDark ? Colors.gray900 : Colors.gray100,
+              }}
+              onPress={() => router.replace('/(passenger)/home')}
+            >
+              <Text style={{ color: isDark ? Colors.gray300 : Colors.gray700, fontWeight: 'semibold', fontSize: FontSize.sm }}>Skip</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.bottomRow}>
+            <TouchableOpacity
+              style={[styles.cancelBtn, isDark && { backgroundColor: Colors.gray900 }]}
+              onPress={handleCancel}
+              disabled={status === 'in_progress' || status === 'completed'}
+            >
+              <Text style={[styles.cancelText, dynamicStyles.subText]}>Cancel Ride</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.sosBtn} onPress={handleSosPress}>
+              <Ionicons name="alert-circle" size={20} color={Colors.white} />
+              <Text style={styles.sosText}>SOS</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
       {(ride?.id || rideId) && user && (
         <ChatModal
@@ -452,6 +501,20 @@ export default function ActiveRideScreen() {
           userId={user.id}
           userName={user.name}
           userRole="passenger"
+          isDark={isDark}
+        />
+      )}
+      {(ride?.id || rideId) && (
+        <RatingModal
+          visible={showRatingModal}
+          onClose={() => {
+            setShowRatingModal(false);
+            router.replace('/(passenger)/home');
+          }}
+          targetUserId={ride?.driver_id || 'driver-id'}
+          targetUserName={ride?.driver_name || 'Driver'}
+          rideId={ride?.id || rideId || ''}
+          role="driver"
           isDark={isDark}
         />
       )}

@@ -115,7 +115,7 @@ export default function LoginScreen() {
               style={styles.suggestionsScroll}
               contentContainerStyle={styles.suggestionsContainer}
             >
-              {['@student.utem.edu.my', 'student.utem.edu.my', '@utem.edu.my', 'utem.edu.my'].map((suggestion) => (
+              {['@siswa.utem.edu.my', 'siswa.utem.edu.my', '@student.utem.edu.my', 'student.utem.edu.my', '@utem.edu.my', 'utem.edu.my'].map((suggestion) => (
                 <TouchableOpacity
                   key={suggestion}
                   style={[styles.suggestionChip, { backgroundColor: isDark ? Colors.gray800 : Colors.gray100 }]}

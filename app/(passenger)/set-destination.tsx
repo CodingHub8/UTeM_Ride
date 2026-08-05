@@ -60,6 +60,9 @@ export default function SetDestinationScreen() {
   const [genderFilter, setGenderFilter] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [scheduledTime, setScheduledTime] = useState<string | null>(null);
+  const [scheduledDayOffset, setScheduledDayOffset] = useState<number>(0);
+  const [spinnerHour, setSpinnerHour] = useState<number>(8);
+  const [spinnerMinute, setSpinnerMinute] = useState<number>(0);
 
   useEffect(() => {
     (async () => {
@@ -480,14 +483,6 @@ export default function SetDestinationScreen() {
               <TouchableOpacity
                 style={[styles.poolListBtn, { backgroundColor: Colors.primary }]}
                 onPress={() => {
-                  if (user && !user.is_2FA_verified) {
-                    Alert.alert(
-                      '2FA Verification Required',
-                      'To view or join pools, please complete 2FA with Google Authenticator. Tap the banner on the home screen.',
-                      [{ text: 'OK' }]
-                    );
-                    return;
-                  }
                   router.push('/(passenger)/carpool-slots');
                 }}
               >
@@ -517,14 +512,6 @@ export default function SetDestinationScreen() {
               style={[styles.confirmBtn, isSearching && { opacity: 0.7 }]}
               disabled={isSearching || !routeData}
               onPress={() => {
-                if (user && !user.is_2FA_verified) {
-                  Alert.alert(
-                    '2FA Verification Required',
-                    'To book or create rides, please complete 2FA with Google Authenticator. Tap the banner on the home screen.',
-                    [{ text: 'OK' }]
-                  );
-                  return;
-                }
                 const ride = RIDE_TYPES.find(r => r.id === selectedRide);
                 const fare = calculateFare(ride?.basePrice || 0);
 
@@ -556,34 +543,115 @@ export default function SetDestinationScreen() {
             <View style={{ height: 20 }} />
           </ScrollView>
 
-          {/* Mock Date Picker Modal */}
+          {/* Date & Time Spinner Modal */}
           <Modal visible={showDatePicker} transparent animationType="slide">
             <View style={styles.modalOverlay}>
               <View style={[styles.modalContent, { backgroundColor: isDark ? Colors.darkCard : Colors.white }]}>
-                <Text style={[styles.modalTitle, dynamicStyles.text]}>Schedule Booking</Text>
-                <Text style={[styles.modalSub, dynamicStyles.subText]}>Select a time for your ride</Text>
+                <Text style={[styles.modalTitle, dynamicStyles.text]}>Schedule Ride Time</Text>
+                <Text style={[styles.modalSub, dynamicStyles.subText]}>Select date and time (Allowed: 7:30 AM – 10:30 PM)</Text>
 
-                <View style={styles.timeGrid}>
-                  {['08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM',
-                    '12:30 PM', '01:00 PM', '01:30 PM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM',
-                    '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM', '07:00 PM', '07:30 PM', '08:00 PM', '08:30 PM', '09:00 PM',
-                    '09:30 PM', '10:00 PM']
-                    .map((time) => (
-                    <TouchableOpacity
-                      key={time}
-                      style={[styles.timeChip, scheduledTime === getScheduledDateTimeString(time) && { backgroundColor: Colors.primary }]}
-                      onPress={() => {
-                        setScheduledTime(getScheduledDateTimeString(time));
-                        setShowDatePicker(false);
-                      }}
-                    >
-                      <Text style={[styles.timeText, { color: isDark ? Colors.white : Colors.gray900 }, scheduledTime === getScheduledDateTimeString(time) && { color: Colors.white }]}>{time}</Text>
-                    </TouchableOpacity>
-                  ))}
+                {/* Day selector */}
+                <View style={{ flexDirection: 'row', gap: 8, marginVertical: 12 }}>
+                  {['Today', 'Tomorrow'].map((dayOpt, idx) => {
+                    const isSel = (scheduledDayOffset === idx);
+                    return (
+                      <TouchableOpacity
+                        key={dayOpt}
+                        style={[{ flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center', backgroundColor: isDark ? Colors.gray900 : Colors.gray100 }, isSel && { backgroundColor: Colors.primary }]}
+                        onPress={() => setScheduledDayOffset(idx)}
+                      >
+                        <Text style={[{ fontSize: 13, fontWeight: '600', color: isDark ? Colors.gray300 : Colors.gray700 }, isSel && { color: Colors.white }]}>{dayOpt}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
 
+                {/* Time Spinner Controls */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 16, gap: 12 }}>
+                  {/* Hour Spinner */}
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={{ fontSize: 11, color: Colors.gray400, marginBottom: 4, textTransform: 'uppercase' }}>Hour</Text>
+                    <ScrollView style={{ height: 120, width: 70 }} showsVerticalScrollIndicator={false}>
+                      {[7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22].map((h) => {
+                        const displayHour = h > 12 ? `${h - 12} PM` : (h === 12 ? '12 PM' : `${h} AM`);
+                        const isSel = (spinnerHour === h);
+                        return (
+                          <TouchableOpacity
+                            key={h}
+                            style={[{ paddingVertical: 8, borderRadius: 6, alignItems: 'center', marginVertical: 2 }, isSel && { backgroundColor: Colors.primary }]}
+                            onPress={() => setSpinnerHour(h)}
+                          >
+                            <Text style={[{ fontSize: 14, color: isDark ? Colors.white : Colors.gray900 }, isSel && { color: Colors.white, fontWeight: 'bold' }]}>{displayHour}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: Colors.primary }}>:</Text>
+
+                  {/* Minute Spinner */}
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={{ fontSize: 11, color: Colors.gray400, marginBottom: 4, textTransform: 'uppercase' }}>Minute</Text>
+                    <ScrollView style={{ height: 120, width: 70 }} showsVerticalScrollIndicator={false}>
+                      {[0, 15, 30, 45].map((m) => {
+                        const displayMin = m < 10 ? `0${m}` : `${m}`;
+                        const isSel = (spinnerMinute === m);
+                        return (
+                          <TouchableOpacity
+                            key={m}
+                            style={[{ paddingVertical: 8, borderRadius: 6, alignItems: 'center', marginVertical: 2 }, isSel && { backgroundColor: Colors.primary }]}
+                            onPress={() => setSpinnerMinute(m)}
+                          >
+                            <Text style={[{ fontSize: 14, color: isDark ? Colors.white : Colors.gray900 }, isSel && { color: Colors.white, fontWeight: 'bold' }]}>{displayMin}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                </View>
+
+                {/* Confirm Time Selection */}
                 <TouchableOpacity
-                  style={[styles.modalCloseBtn, { backgroundColor: isDark ? Colors.gray800 : Colors.gray100 }]}
+                  style={{ backgroundColor: Colors.primary, paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginTop: 8 }}
+                  onPress={() => {
+                    // Restrict 7:30 AM to 10:30 PM
+                    const totalMin = spinnerHour * 60 + spinnerMinute;
+                    const minAllowed = 7 * 60 + 30;  // 7:30 AM = 450 min
+                    const maxAllowed = 22 * 60 + 30; // 10:30 PM = 1350 min
+
+                    if (totalMin < minAllowed || totalMin > maxAllowed) {
+                      Alert.alert('Time Restriction', 'Rides can only be scheduled between 7:30 AM and 10:30 PM.');
+                      return;
+                    }
+
+                    // PAST TIME RESTRICTION FOR TODAY
+                    if (scheduledDayOffset === 0) {
+                      const now = new Date();
+                      const currentHour = now.getHours();
+                      const currentMin = now.getMinutes();
+                      if (spinnerHour < currentHour || (spinnerHour === currentHour && spinnerMinute <= currentMin)) {
+                        Alert.alert(
+                          'Invalid Time Selection',
+                          `You cannot schedule a ride for a past time. Please select a future time after current time.`
+                        );
+                        return;
+                      }
+                    }
+
+                    const targetDate = new Date();
+                    targetDate.setDate(targetDate.getDate() + scheduledDayOffset);
+                    targetDate.setHours(spinnerHour, spinnerMinute, 0, 0);
+
+                    setScheduledTime(targetDate.toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }));
+                    setShowDatePicker(false);
+                  }}
+                >
+                  <Text style={{ color: Colors.white, fontWeight: 'bold', fontSize: 14 }}>Set Scheduled Time</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalCloseBtn, { backgroundColor: isDark ? Colors.gray800 : Colors.gray100 }, { marginTop: 8 }]}
                   onPress={() => {
                     setScheduledTime(null);
                     setShowDatePicker(false);

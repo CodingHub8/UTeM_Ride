@@ -235,7 +235,7 @@ export default function DocumentUploadScreen() {
         encryptedData
       );
       
-      Alert.alert('Registration Successful', `Welcome! Account ${studentId} registered. Set up Google Authenticator from the banner on Home to book rides.`, [
+      Alert.alert('Registration Successful', `Welcome! Account ${studentId} registered successfully. You can now sign in to UTeM Ride.`, [
         { text: 'OK', onPress: () => router.replace('/(auth)/role-select') }
       ]);
     } catch (e: any) {

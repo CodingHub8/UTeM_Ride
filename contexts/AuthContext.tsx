@@ -14,6 +14,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { AppState } from 'react-native';
 import { auth, db, storage } from '@/utils/firebase';
 import { registerForPushNotifications, savePushToken } from '@/utils/notifications';
 
@@ -31,6 +32,7 @@ export interface User {
   gender: Gender;
   is_verified: boolean;
   is_2FA_verified: boolean;
+  is_online: boolean;
   matricCardImage?: string;
   roadTaxImage?: string;
   vehiclePlate?: string;
@@ -118,22 +120,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const userSnap = await getDoc(userRef);
             if (userSnap.exists()) {
               const data = userSnap.data();
+              const userRole = (data.role as UserRole) || 'passenger';
+              setRole(userRole);
+
+              // Auto-set driver to online on login
+              if (userRole === 'driver') {
+                try {
+                  await updateDoc(userRef, { is_online: true, updated_at: serverTimestamp() });
+                } catch (err) {
+                  console.warn('[AuthContext] Failed to set driver online status:', err);
+                }
+              }
+
               setUser({
                 id: studentId,
                 firebaseUid: firebaseUser.uid,
-                name: data.name,
-                email: data.email,
-                phone: data.phone,
-                role: data.role ?? 'passenger',
-                gender: data.gender,
+                name: data.name || '',
+                email: data.email || firebaseUser.email || '',
+                phone: data.phone || '',
+                role: userRole,
+                gender: data.gender || 'Male',
                 is_verified: data.is_verified ?? false,
                 is_2FA_verified: data.is_2FA_verified ?? false,
                 vehiclePlate: data.vehiclePlate,
                 vehicleModel: data.vehicleModel,
                 vehicleColor: data.vehicleColor,
                 encryptedDocs: data.encryptedDocs,
+                is_online: userRole === 'driver' ? true : data.is_online ?? false,
               });
-              setRole(data.role ?? 'passenger');
 
               registerForPushNotifications().then((token) => {
                 if (token) savePushToken(studentId, token);
@@ -150,6 +164,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     return unsubscribe;
   }, []);
+
+  // Automatically toggle driver online status based on app lifecycle (Foreground = online, Background/Inactive = offline)
+  useEffect(() => {
+    if (!user?.id || role !== 'driver') return;
+
+    const userRef = doc(db, 'users', user.id);
+    // Set online to true immediately when driver app is running
+    updateDoc(userRef, { is_online: true, updated_at: serverTimestamp() }).catch(() => {});
+    setUser((prev) => prev ? { ...prev, is_online: true } : null);
+
+    const subscription = AppState.addEventListener('change', async (nextAppState) => {
+      try {
+        if (nextAppState === 'active') {
+          await updateDoc(userRef, { is_online: true, updated_at: serverTimestamp() });
+          setUser((prev) => prev ? { ...prev, is_online: true } : null);
+        } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+          await updateDoc(userRef, { is_online: false, updated_at: serverTimestamp() });
+          setUser((prev) => prev ? { ...prev, is_online: false } : null);
+        }
+      } catch (err) {
+        console.warn('[AuthContext] AppState driver online update error:', err);
+      }
+    });
+
+    return () => {
+      updateDoc(userRef, { is_online: false, updated_at: serverTimestamp() }).catch(() => {});
+      subscription.remove();
+    };
+  }, [user?.id, role]);
 
   /**
    * Login — Firebase Email/Password sign-in.
@@ -223,6 +266,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           gender: mock.gender,
           is_verified: mock.verified,
           is_2FA_verified: true,
+          is_online: true,
           vehiclePlate: mock.plate,
           vehicleModel: mock.model,
           vehicleColor: mock.color,
@@ -254,6 +298,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     vehicleColor: string,
     encryptedDocs: string,
   ) => {
+    // 0. Extract matric ID from email / studentId and verify it does not already exist in Firestore
+    const normalizedMatricId = (studentId || email.split('@')[0]).toUpperCase().trim();
+    const existingUserSnap = await getDoc(doc(db, 'users', normalizedMatricId));
+    if (existingUserSnap.exists()) {
+      throw new Error(
+        `Account with Matric/Staff ID "${normalizedMatricId}" is already registered. You cannot register again using a different email domain (e.g. @siswa.utem.edu.my vs @student.utem.edu.my). Please sign in with your existing account.`
+      );
+    }
+
     // 1. Create Firebase Auth account FIRST (no Firestore needed)
     let credential;
     try {
@@ -360,6 +413,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       gender,
       is_verified: false,
       is_2FA_verified: false,
+      is_online: false,
       matricCardImage: matricCardUrl,
       roadTaxImage: roadTaxUrl,
       vehiclePlate,
@@ -373,9 +427,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * Logout — signs out from Firebase Auth and clears local state.
    */
   const logout = useCallback(async () => {
+    if (user?.id && (role === 'driver' || user.role === 'driver')) {
+      try {
+        await updateDoc(doc(db, 'users', user.id), { is_online: false, updated_at: serverTimestamp() });
+      } catch (err) {
+        console.warn('[AuthContext] Failed to set is_online false on logout:', err);
+      }
+    }
     await signOut(auth);
     setUser(null);
-  }, []);
+  }, [user?.id, user?.role, role]);
 
   /**
    * Switch between passenger and driver mode client-side.
@@ -385,7 +446,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const switchRole = useCallback(() => {
     setRole((prev) => {
       const newRole = prev === 'passenger' ? 'driver' : 'passenger';
-      if (user) setUser({ ...user, role: newRole });
+      if (user) {
+        const isOnlineVal = newRole === 'driver';
+        setUser({ ...user, role: newRole, is_online: isOnlineVal });
+        if (user.id) {
+          updateDoc(doc(db, 'users', user.id), {
+            is_online: isOnlineVal,
+            updated_at: serverTimestamp(),
+          }).catch(() => {});
+        }
+      }
       return newRole;
     });
   }, [user]);

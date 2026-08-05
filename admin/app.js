@@ -478,7 +478,8 @@ function startDatabaseListeners() {
           reason: userData.rejection_reason || userDoc.rejection_reason || '',
           matricCardUrl: userDoc.matric_card_url || '',
           roadTaxUrl: userDoc.road_tax_url || '',
-          expiryDate: userData.roadTaxExpiry || 'N/A'
+          expiryDate: userData.roadTaxExpiry || 'N/A',
+          additionalDocs: userDoc.additional_documents || userDoc.vehicle_documents || userDoc.vehicleDocs || []
         });
       });
 
@@ -819,9 +820,38 @@ window.openInspectionModal = function(userId) {
         user.expiryDate || 'N/A'
       );
     }
+    
+    // Additional driver attached documents
+    const addDocsGroup = document.getElementById('additional-docs-preview-group');
+    const addDocsContainer = document.getElementById('additional-docs-container');
+    if (addDocsContainer) addDocsContainer.innerHTML = '';
+    
+    if (user.additionalDocs && user.additionalDocs.length > 0) {
+      if (addDocsGroup) addDocsGroup.style.display = 'block';
+      user.additionalDocs.forEach((docItem, index) => {
+        const docTitle = typeof docItem === 'string' ? `Document ${index + 1}` : (docItem.type || `Document ${index + 1}`);
+        const docUrl = typeof docItem === 'string' ? docItem : (docItem.uri || docItem.url || '');
+        if (docUrl && addDocsContainer) {
+          const card = document.createElement('div');
+          card.style.cssText = 'background:var(--bg-tertiary); padding:10px; border-radius:var(--radius-sm); border:1px solid var(--border-color);';
+          card.innerHTML = `
+            <div style="font-weight:600; font-size:13px; margin-bottom:6px; color:var(--text-primary);">${docTitle}</div>
+            <img src="${docUrl}" alt="${docTitle}" style="max-width:100%; max-height:200px; border-radius:4px; object-fit:contain; background:#000;">
+            <div style="margin-top:6px; text-align:right;">
+              <a href="${docUrl}" target="_blank" style="color:var(--primary-color); font-size:12px; font-weight:600; text-decoration:none;">View Full Image ↗</a>
+            </div>
+          `;
+          addDocsContainer.appendChild(card);
+        }
+      });
+    } else if (addDocsGroup) {
+      addDocsGroup.style.display = 'none';
+    }
   } else {
     roadTaxGroup.style.display = 'none';
     ocrVehicleDetails.style.display = 'none';
+    const addDocsGroup = document.getElementById('additional-docs-preview-group');
+    if (addDocsGroup) addDocsGroup.style.display = 'none';
   }
 
   // Display modal overlay

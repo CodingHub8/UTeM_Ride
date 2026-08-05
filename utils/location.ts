@@ -157,11 +157,11 @@ export async function getNearbyPlaces(lat: number, lng: number) {
   }
 }
 
-export async function getPlaceAutocomplete(input: string, lat?: number, lng?: number) {
+export async function getPlaceAutocomplete(input: string, lat: number = 2.3086, lng: number = 102.3197) {
   const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
   if (!apiKey || !input) return [];
 
-  const locationBias = lat && lng ? `&location=${lat},${lng}&radius=10000` : '';
+  const locationBias = `&location=${lat},${lng}&radius=25000&components=country:my`;
 
   try {
     const response = await fetch(

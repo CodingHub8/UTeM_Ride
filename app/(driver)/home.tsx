@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -49,7 +49,13 @@ export default function DriverHomeScreen() {
   const navigation = useNavigation();
   const { user, refreshProfile } = useAuth();
   const { isDark, theme } = useTheme();
-  const [isOnline, setIsOnline] = useState(false);
+  const [isOnline, setIsOnline] = useState(user?.is_online ?? true);
+
+  useEffect(() => {
+    if (user?.is_online !== undefined) {
+      setIsOnline(user.is_online);
+    }
+  }, [user?.is_online]);
   const [pendingCount, setPendingCount] = useState(0);
   const [rejectedIds, setRejectedIds] = useState<string[]>([]);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -206,27 +212,21 @@ export default function DriverHomeScreen() {
     }
   };
 
-  const handleToggleOnline = (value: boolean) => {
-    if (value && user && !user.is_2FA_verified) {
-      Alert.alert(
-        '2FA Required',
-        'Please complete your 2FA verification first to go online and receive requests.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
+  const handleToggleOnline = async (value: boolean) => {
     setIsOnline(value);
+    if (user?.id) {
+      try {
+        await updateDoc(doc(db, 'users', user.id), {
+          is_online: value,
+          updated_at: serverTimestamp(),
+        });
+      } catch (e) {
+        console.warn('Failed to update online status:', e);
+      }
+    }
   };
 
   const handleSchedulePool = () => {
-    if (user && !user.is_2FA_verified) {
-      Alert.alert(
-        '2FA Required',
-        'Please complete your 2FA verification first to schedule/pool rides.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
     router.push('/(driver)/create-pool');
   };
 
@@ -282,21 +282,7 @@ export default function DriverHomeScreen() {
           <Ionicons name="chevron-forward" size={16} color={Colors.white} />
         </TouchableOpacity>
       )}
-      {/* 2FA Banner */}
-      {user && !user.is_2FA_verified && (
-        <TouchableOpacity 
-          style={[styles.verificationBanner, { backgroundColor: Colors.warning, top: insets.top + 10 + (activeRide ? 56 : 0) }]}
-          onPress={() => setShow2FA(true)}
-        >
-          <View style={styles.verificationBannerLeft}>
-            <Ionicons name="warning-outline" size={18} color={Colors.white} />
-            <Text style={styles.verificationBannerText}>
-              2FA Pending: Set up Google Authenticator.
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={Colors.white} />
-        </TouchableOpacity>
-      )}
+
 
       {/* Google Map */}
       <View style={styles.mapArea}>

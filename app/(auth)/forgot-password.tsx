@@ -50,9 +50,9 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
-    const endsWithUtem = email.endsWith('@student.utem.edu.my') || email.endsWith('@utem.edu.my');
+    const endsWithUtem = email.endsWith('@student.utem.edu.my') || email.endsWith('@siswa.utem.edu.my') || email.endsWith('@utem.edu.my');
     if (!endsWithUtem) {
-      showError('Only UTeM emails can be reset!');
+      showError('Only UTeM emails (@siswa.utem.edu.my, @student.utem.edu.my, or @utem.edu.my) can be reset!');
       return;
     }
 
@@ -144,7 +144,7 @@ export default function ForgotPasswordScreen() {
                   style={styles.suggestionsScroll}
                   contentContainerStyle={styles.suggestionsContainer}
                 >
-                  {['@student.utem.edu.my', 'student.utem.edu.my', '@utem.edu.my', 'utem.edu.my'].map((suggestion) => (
+                  {['@siswa.utem.edu.my', 'siswa.utem.edu.my', '@student.utem.edu.my', 'student.utem.edu.my', '@utem.edu.my', 'utem.edu.my'].map((suggestion) => (
                     <TouchableOpacity
                       key={suggestion}
                       style={[styles.suggestionChip, { backgroundColor: isDark ? Colors.gray800 : Colors.gray100 }]}

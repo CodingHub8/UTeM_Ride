@@ -124,6 +124,16 @@ export default function PassengerProfileScreen() {
           </View>
           <Switch value={notifications} onValueChange={setNotifications} trackColor={{ true: Colors.primary }} />
         </View>
+        <TouchableOpacity
+          style={styles.settingRow}
+          onPress={() => router.push('/(passenger)/support')}
+        >
+          <View style={styles.settingLeft}>
+            <Ionicons name="help-circle-outline" size={20} color={isDark ? Colors.gray300 : Colors.gray600} />
+            <Text style={[styles.settingLabel, dynamicStyles.text]}>Help & Support (FAQ)</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={isDark ? Colors.gray500 : Colors.gray400} />
+        </TouchableOpacity>
       </View>
 
       {/* Switch & Logout */}

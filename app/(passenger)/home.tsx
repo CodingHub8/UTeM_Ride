@@ -15,7 +15,7 @@ import Animated, {
   interpolateColor,
   runOnJS 
 } from 'react-native-reanimated';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -122,18 +122,63 @@ export default function PassengerHomeScreen() {
       const recentP = await getRecentPickups();
       const combined: any[] = [];
       const seen = new Set<string>();
-      recentP.forEach((p: any) => {
-        if (p.name && !seen.has(p.name)) {
-          combined.push({ ...p, icon: 'time', isRecent: true });
-          seen.add(p.name);
+
+      // 1. Fetch passenger's completed ride destinations from Firestore history
+      if (user?.id) {
+        try {
+          const qHistory = query(
+            collection(db, 'rides'),
+            where('passenger_id', '==', user.id),
+            where('status', '==', 'completed')
+          );
+          const historySnap = await getDocs(qHistory);
+          const historyRides: any[] = [];
+          historySnap.forEach((docSnap) => {
+            const data = docSnap.data();
+            if (data.destination_address) {
+              historyRides.push({
+                id: docSnap.id,
+                name: data.destination_address,
+                address: data.destination_address,
+                coords: {
+                  latitude: data.destination_latitude || 2.3086,
+                  longitude: data.destination_longitude || 102.3197,
+                },
+                timestamp: data.created_at?.toMillis?.() || 0,
+                icon: 'time-outline',
+                isRecent: true,
+              });
+            }
+          });
+
+          // Sort history by timestamp descending (most recent at top)
+          historyRides.sort((a, b) => b.timestamp - a.timestamp);
+
+          historyRides.forEach((item) => {
+            if (!seen.has(item.name)) {
+              combined.push(item);
+              seen.add(item.name);
+            }
+          });
+        } catch (histErr) {
+          console.warn('[Home] Failed to load passenger Firestore ride history:', histErr);
         }
-      });
+      }
+
+      // 2. Append local recent destinations & pickups
       recentD.forEach((d: any) => {
         if (d.name && !seen.has(d.name)) {
-          combined.push({ ...d, icon: 'location', isRecent: true });
+          combined.push({ ...d, icon: 'location-outline', isRecent: true });
           seen.add(d.name);
         }
       });
+      recentP.forEach((p: any) => {
+        if (p.name && !seen.has(p.name)) {
+          combined.push({ ...p, icon: 'time-outline', isRecent: true });
+          seen.add(p.name);
+        }
+      });
+
       setRecentPlaces(combined.slice(0, 8));
     } catch (e) {
       console.error('Error loading recent locations on home:', e);
@@ -430,20 +475,7 @@ export default function PassengerHomeScreen() {
             <Ionicons name="chevron-forward" size={16} color={Colors.white} />
           </TouchableOpacity>
         )}
-        {user && !user.is_2FA_verified && (
-          <TouchableOpacity 
-            style={[styles.verificationBanner, { backgroundColor: Colors.warning, top: insets.top + 10 + (activeRide ? 56 : 0) }]}
-            onPress={() => setShow2FA(true)}
-          >
-            <View style={styles.verificationBannerLeft}>
-              <Ionicons name="warning-outline" size={18} color={Colors.white} />
-              <Text style={styles.verificationBannerText}>
-                2FA Pending: Set up Google Authenticator.
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={Colors.white} />
-          </TouchableOpacity>
-        )}
+
         {/* Google Map */}
         <View style={styles.mapContainer}>
           <MapView
