@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, FontSize, FontWeight } from '@/constants/theme';
@@ -63,10 +63,10 @@ export default function SplashScreen() {
       style={styles.container}
     >
       <Animated.View style={[styles.logoContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-        <View style={styles.iconCircle}>
-          <Text style={styles.iconText}>🚗</Text>
-        </View>
-        <Text style={styles.title}>UTeM Ride</Text>
+        <Image
+          source={require('@/assets/images/UTeMRideIconWhiteTextTransparent.png')}
+          style={{ width: 320, height: 160, resizeMode: 'contain' }}
+        />
       </Animated.View>
 
       <Animated.View style={[styles.subtitleContainer, { opacity: subtitleFade }]}>

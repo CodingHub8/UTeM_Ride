@@ -15,18 +15,25 @@ interface OCRResult {
   };
 }
 
-import { readAsStringAsync } from 'expo-file-system/legacy';
-
 /**
- * Converts a local URI to base64 string using expo-file-system.
+ * Converts a local URI to base64 string using standard fetch & FileReader.
  * Works reliably on iOS, Android, and Web platforms.
  */
 async function uriToBase64(uri: string): Promise<string> {
   try {
-    const base64 = await readAsStringAsync(uri, {
-      encoding: 'base64',
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64data = reader.result as string;
+        // Strip data url prefix if present (e.g. data:image/jpeg;base64,)
+        const base64 = base64data.includes(',') ? base64data.split(',')[1] : base64data;
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
     });
-    return base64;
   } catch (error) {
     throw new Error(`Failed to read image file: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }

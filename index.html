@@ -3,11 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>UTeM Ride — Smart & Safe Campus Carpooling</title>
+  <title>UTeM Ride</title>
   <!-- Google Fonts: Inter & Outfit -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- Favicon Tab Icon -->
+  <link rel="icon" type="image/png" href="assets/images/UTeMRideIcon.png">
   <!-- Stylesheet -->
   <link rel="stylesheet" href="landing-style.css">
 </head>
@@ -16,19 +18,12 @@
   <header class="navbar">
     <div class="nav-container">
       <div class="logo">
-        <div class="logo-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="3"/><path d="M9 17h6"/><circle cx="17" cy="17" r="3"/></svg>
-        </div>
-        <span>UTeM Ride</span>
+        <img src="assets/images/UTeMRideIconWhiteTextTransparent.png" alt="UTeM Ride Logo" style="height: 42px; width: auto; object-fit: contain;">
       </div>
       <nav class="nav-links">
         <a href="#features">Features</a>
         <a href="#how-it-works">How It Works</a>
         <a href="#download" class="btn btn-secondary nav-cta">Download App</a>
-        <a href="admin/index.html" class="admin-portal-link">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          Portal Admin
-        </a>
       </nav>
     </div>
   </header>
@@ -263,18 +258,17 @@
 
   <!-- Download Section -->
   <section id="download" class="download-section">
-    <div class="download-container">
-      <div class="download-text">
+    <div class="download-container" style="justify-content: center; text-align: center; flex-direction: column; align-items: center;">
+      <div class="download-text" style="max-width: 650px; margin: 0 auto; text-align: center; display: flex; flex-direction: column; align-items: center;">
         <h2>Ready to commute smart?</h2>
         <p>Download the UTeM Ride app and join thousands of students traveling between campuses efficiently every single day.</p>
-        <div class="download-buttons">
+        <div class="download-buttons" style="justify-content: center; width: 100%;">
           <a href="assets/utem-ride.apk" download class="btn btn-primary btn-lg">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.3l1.816 3.146a.5.5 0 0 1-.183.683.501.501 0 0 1-.683-.183l-1.836-3.18A9.873 9.873 0 0 1 12 16c-1.77 0-3.415-.46-4.85-1.258l-1.84 3.193a.501.501 0 0 1-.683.183.5.5 0 0 1-.183-.683l1.815-3.147A9.957 9.957 0 0 1 2.05 9H21.95a9.957 9.957 0 0 1-4.427 6.3zM5.5 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm13 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 2a10.024 10.024 0 0 0-9.876 8h19.752A10.024 10.024 0 0 0 12 2z"/></svg>
             Download UTeM Ride Android APK
           </a>
         </div>
       </div>
-      <div class="download-badge-icon">🚗</div>
     </div>
   </section>
 
@@ -285,7 +279,6 @@
       <div class="footer-links">
         <a href="#features">Features</a>
         <a href="#how-it-works">How It Works</a>
-        <a href="admin/index.html">Portal Admin</a>
       </div>
     </div>
   </footer>

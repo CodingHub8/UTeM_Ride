@@ -9,6 +9,7 @@ import {
   Platform,
   Animated,
   ScrollView,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -83,9 +84,6 @@ export default function LoginScreen() {
         >
           {/* Header */}
           <View style={styles.header}>
-            <View style={styles.logoCircle}>
-              <Text style={styles.logoEmoji}>🚗</Text>
-            </View>
             <Text style={styles.appName}>UTeM Ride</Text>
             <Text style={styles.tagline}>Welcome back</Text>
           </View>
@@ -191,34 +189,6 @@ export default function LoginScreen() {
               <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
                 <Text style={styles.signupLink}>Sign Up</Text>
               </TouchableOpacity>
-            </View>
-
-            {/* Quick Sandbox Logins */}
-            <View style={[styles.sandboxContainer, { borderTopColor: isDark ? Colors.darkBorder : Colors.gray100 }]}>
-              <Text style={[styles.sandboxTitle, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>
-                Quick Sandbox Login
-              </Text>
-              <View style={styles.sandboxGrid}>
-                {[
-                  { label: 'Hazim (Driver)', email: 'driver1@student.utem.edu.my' },
-                  { label: 'Danish (Passenger)', email: 'passenger1@student.utem.edu.my' },
-                  { label: 'Ridzuan (Driver)', email: 'driver2@utem.edu.my' },
-                  { label: 'Sarah (Passenger)', email: 'passenger2@student.utem.edu.my' },
-                ].map((account) => (
-                  <TouchableOpacity
-                    key={account.email}
-                    style={[styles.sandboxBtn, { backgroundColor: isDark ? Colors.gray900 : Colors.gray50 }]}
-                    onPress={() => {
-                      setEmail(account.email);
-                      setPassword('password123');
-                    }}
-                  >
-                    <Text style={[styles.sandboxText, { color: isDark ? Colors.primaryLight : Colors.primary }]}>
-                      {account.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
             </View>
           </View>
         </ScrollView>

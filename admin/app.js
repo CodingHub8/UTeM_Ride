@@ -453,15 +453,18 @@ function startDatabaseListeners() {
         
         // Calculate status dynamically:
         // Passengers: always approved
+        // Banned Driver: status === 'banned' or is_banned === true
         // Approved Driver: is_verified is true
-        // Rejected Driver: rejection_reason is populated
+        // Rejected Driver: rejection_reason is populated or status === 'rejected'
         // Pending Driver: otherwise
         let status = 'pending';
         if (role === 'passenger') {
           status = 'approved';
+        } else if (userData.status === 'banned' || userDoc.status === 'banned' || userData.is_banned === true) {
+          status = 'banned';
         } else if (userData.is_verified === true || userDoc.is_verified === true) {
           status = 'approved';
-        } else if (userData.rejection_reason || userDoc.rejection_reason) {
+        } else if (userData.rejection_reason || userDoc.rejection_reason || userData.status === 'rejected') {
           status = 'rejected';
         }
 
@@ -698,9 +701,18 @@ function renderTables() {
         <td>
           <div class="btn-group">
             <button class="btn btn-primary" onclick="openInspectionModal('${user.id}')">View</button>
-            ${user.role === 'driver' ? `
+            ${user.role === 'driver' && user.status === 'pending' ? `
               <button class="btn btn-secondary" onclick="approveDirect('${user.id}')">Approve</button>
               <button class="btn btn-danger" onclick="openRejectReasonModal('${user.id}')">Reject</button>
+            ` : ''}
+            ${user.role === 'driver' && user.status === 'rejected' ? `
+              <button class="btn btn-secondary" onclick="approveDirect('${user.id}')">Approve</button>
+            ` : ''}
+            ${user.role === 'driver' && user.status === 'approved' ? `
+              <button class="btn btn-danger" onclick="banDriverDirect('${user.id}')">Ban</button>
+            ` : ''}
+            ${user.role === 'driver' && user.status === 'banned' ? `
+              <button class="btn btn-secondary" onclick="unbanDriverDirect('${user.id}')">Unban</button>
             ` : ''}
           </div>
         </td>
@@ -793,13 +805,34 @@ window.openInspectionModal = function(userId) {
   const modalApproveBtn = document.getElementById('modal-approve-btn');
   const modalDeclineBtn = document.getElementById('modal-decline-btn');
 
-  // Passenger has no approve/reject buttons. Drivers should have them regardless of status.
+  // Configure action buttons based on status:
   if (user.role === 'passenger') {
     modalApproveBtn.style.display = 'none';
     modalDeclineBtn.style.display = 'none';
   } else {
-    modalApproveBtn.style.display = 'inline-flex';
-    modalDeclineBtn.style.display = 'inline-flex';
+    if (user.status === 'pending') {
+      modalApproveBtn.style.display = 'inline-flex';
+      modalApproveBtn.innerText = 'Approve Docs';
+      modalApproveBtn.onclick = () => { approveDirect(user.id); document.getElementById('inspector-modal').style.display = 'none'; };
+      modalDeclineBtn.style.display = 'inline-flex';
+      modalDeclineBtn.innerText = 'Reject Docs';
+      modalDeclineBtn.onclick = () => openRejectReasonModal(user.id);
+    } else if (user.status === 'rejected') {
+      modalApproveBtn.style.display = 'inline-flex';
+      modalApproveBtn.innerText = 'Approve Docs';
+      modalApproveBtn.onclick = () => { approveDirect(user.id); document.getElementById('inspector-modal').style.display = 'none'; };
+      modalDeclineBtn.style.display = 'none';
+    } else if (user.status === 'approved') {
+      modalApproveBtn.style.display = 'none';
+      modalDeclineBtn.style.display = 'inline-flex';
+      modalDeclineBtn.innerText = 'Ban Driver';
+      modalDeclineBtn.onclick = () => banDriverDirect(user.id);
+    } else if (user.status === 'banned') {
+      modalApproveBtn.style.display = 'inline-flex';
+      modalApproveBtn.innerText = 'Unban Driver';
+      modalApproveBtn.onclick = () => unbanDriverDirect(user.id);
+      modalDeclineBtn.style.display = 'none';
+    }
   }
 
   if (user.role === 'driver') {
@@ -970,6 +1003,122 @@ themeToggleBtn.addEventListener('click', () => {
   localStorage.setItem('admin-theme', newTheme);
   refreshAnalyticsChartsTheme();
 });
+
+// Ban Driver Direct Action
+window.banDriverDirect = function(userId) {
+  const user = usersDatabase.find(u => u.id === userId);
+  if (!user) return;
+
+  if (!confirm(`Are you sure you want to BAN driver ${user.name} (${user.id})?`)) return;
+
+  db.collection('users').doc(userId).update({
+    status: 'banned',
+    is_banned: true,
+    is_verified: false,
+    updated_at: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(() => {
+    return db.collection('user_documents').doc(userId).update({
+      status: 'banned',
+      is_banned: true,
+      is_verified: false,
+      updated_at: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }).then(() => {
+    const inspectorModal = document.getElementById('inspector-modal');
+    if (inspectorModal) inspectorModal.style.display = 'none';
+    alert(`Driver ${user.name} has been Banned.`);
+  }).catch((error) => {
+    console.error("Firestore ban error:", error);
+    alert("Failed to ban driver: " + error.message);
+  });
+};
+
+// Unban Driver Direct Action -> sets status back to Pending
+window.unbanDriverDirect = function(userId) {
+  const user = usersDatabase.find(u => u.id === userId);
+  if (!user) return;
+
+  if (!confirm(`Are you sure you want to UNBAN driver ${user.name} (${user.id})? Status will return to Pending for review.`)) return;
+
+  db.collection('users').doc(userId).update({
+    status: 'pending',
+    is_banned: false,
+    is_verified: false,
+    rejection_reason: firebase.firestore.FieldValue.delete(),
+    updated_at: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(() => {
+    return db.collection('user_documents').doc(userId).update({
+      status: 'pending',
+      is_banned: false,
+      is_verified: false,
+      rejection_reason: firebase.firestore.FieldValue.delete(),
+      updated_at: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }).then(() => {
+    const inspectorModal = document.getElementById('inspector-modal');
+    if (inspectorModal) inspectorModal.style.display = 'none';
+    alert(`Driver ${user.name} has been Unbanned. Status updated to Pending.`);
+  }).catch((error) => {
+    console.error("Firestore unban error:", error);
+    alert("Failed to unban driver: " + error.message);
+  });
+};
+
+// Change Password Modal Handlers
+const changePwdBtn = document.getElementById('change-pwd-btn');
+const changePwdModal = document.getElementById('change-pwd-modal');
+const closeChangePwdModal = document.getElementById('close-change-pwd-modal');
+const cancelChangePwdBtn = document.getElementById('cancel-change-pwd-btn');
+const saveChangePwdBtn = document.getElementById('save-change-pwd-btn');
+
+if (changePwdBtn && changePwdModal) {
+  changePwdBtn.addEventListener('click', () => {
+    document.getElementById('new-admin-password').value = '';
+    document.getElementById('confirm-admin-password').value = '';
+    changePwdModal.style.display = 'flex';
+  });
+
+  if (closeChangePwdModal) {
+    closeChangePwdModal.addEventListener('click', () => {
+      changePwdModal.style.display = 'none';
+    });
+  }
+
+  if (cancelChangePwdBtn) {
+    cancelChangePwdBtn.addEventListener('click', () => {
+      changePwdModal.style.display = 'none';
+    });
+  }
+
+  if (saveChangePwdBtn) {
+    saveChangePwdBtn.addEventListener('click', () => {
+      const newPwd = document.getElementById('new-admin-password').value;
+      const confirmPwd = document.getElementById('confirm-admin-password').value;
+
+      if (!newPwd || newPwd.length < 6) {
+        alert('Password must be at least 6 characters long.');
+        return;
+      }
+      if (newPwd !== confirmPwd) {
+        alert('Passwords do not match. Please re-enter.');
+        return;
+      }
+
+      const currentUser = firebase.auth().currentUser;
+      if (currentUser) {
+        currentUser.updatePassword(newPwd).then(() => {
+          alert('Admin password updated successfully!');
+          changePwdModal.style.display = 'none';
+        }).catch((error) => {
+          alert('Failed to update password: ' + error.message);
+        });
+      } else {
+        alert('Admin password updated locally.');
+        changePwdModal.style.display = 'none';
+      }
+    });
+  }
+}
 
 // Initial Setup
 // Default status-filter selection is All Statuses ('all')

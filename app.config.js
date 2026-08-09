@@ -1,10 +1,10 @@
 module.exports = {
   expo: {
-    name: "UTeM_Ride",
-    slug: "UTeM_Ride",
+    name: "UTeM Ride",
+    slug: "utem-ride",
     version: "1.0.0",
     orientation: "portrait",
-    icon: "./assets/images/icon.png",
+    icon: "./assets/images/UTeMRideIcon.png",
     scheme: "utemride",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
@@ -27,8 +27,8 @@ module.exports = {
         }
       },
       adaptiveIcon: {
-        backgroundColor: "#E6F4FE",
-        foregroundImage: "./assets/images/android-icon-foreground.png",
+        backgroundColor: "#FFFFFF",
+        foregroundImage: "./assets/images/UTeMRideIcon.png",
         backgroundImage: "./assets/images/android-icon-background.png",
         monochromeImage: "./assets/images/android-icon-monochrome.png"
       },
@@ -39,26 +39,26 @@ module.exports = {
     },
     web: {
       output: "static",
-      favicon: "./assets/images/favicon.png"
+      favicon: "./assets/images/UTeMRideIcon.png"
     },
     plugins: [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "image": "./assets/images/UTeMRideLogoBlue.png",
+          "imageWidth": 250,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#0057B8",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#0057B8"
           }
         }
       ],
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/icon.png",
+          "icon": "./assets/images/UTeMRideIcon.png",
           "color": "#0057B8"
         }
       ]

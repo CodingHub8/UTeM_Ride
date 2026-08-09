@@ -443,6 +443,7 @@ body {
 .status-badge.pending { background-color: var(--warning-light); color: var(--warning); }
 .status-badge.approved { background-color: var(--success-light); color: var(--success); }
 .status-badge.rejected { background-color: var(--error-light); color: var(--error); }
+.status-badge.banned { background-color: rgba(224, 36, 36, 0.15); color: #e02424; }
 
 /* Table action buttons */
 .btn-group {
