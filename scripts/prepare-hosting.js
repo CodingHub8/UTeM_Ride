@@ -70,11 +70,13 @@ try {
         }
       });
     }
-    // Also copy tab icon as root favicon.ico & favicon.png for instant tab icon rendering
+    // Also copy tab icon as root and admin favicon.ico & favicon.png for instant tab icon rendering
     const iconSrc = path.join(imagesSrcDir, 'UTeMRideIcon.png');
     if (fs.existsSync(iconSrc)) {
       fs.copyFileSync(iconSrc, path.join(hostingDir, 'favicon.ico'));
       fs.copyFileSync(iconSrc, path.join(hostingDir, 'favicon.png'));
+      fs.copyFileSync(iconSrc, path.join(hostingAdminDir, 'favicon.ico'));
+      fs.copyFileSync(iconSrc, path.join(hostingAdminDir, 'favicon.png'));
     }
     console.log('✓ Copied assets/images directory and favicons to hosting bundle.');
   }

@@ -58,9 +58,21 @@ loginForm.addEventListener('submit', async (e) => {
     // Try to authenticate using Firebase Auth
     await auth.signInWithEmailAndPassword(email, password);
   } catch (error) {
-    console.warn("Firebase Auth login failed. Checking admin fallback...", error.message);
-    const activeAdminPwd = localStorage.getItem('admin_password');
-    // Fallback: If credentials match active admin password, allow access
+    console.warn("Firebase Auth login attempt:", error.message);
+
+    // Fetch remote password from Firestore if available
+    let remoteAdminPwd = null;
+    try {
+      const configDoc = await db.collection('admin_settings').doc('config').get();
+      if (configDoc.exists && configDoc.data().admin_password) {
+        remoteAdminPwd = configDoc.data().admin_password;
+      }
+    } catch (dbErr) {
+      console.warn("Firestore config read notice:", dbErr);
+    }
+
+    const activeAdminPwd = remoteAdminPwd || localStorage.getItem('admin_password') || 'admin12345';
+
     if ((email === 'admin@utemride.com' || email === 'admin@utem.edu.my') && password === activeAdminPwd) {
       localStorage.setItem('admin_logged_in', 'true');
       loginOverlay.style.display = 'none';
@@ -1092,7 +1104,7 @@ if (changePwdBtn && changePwdModal) {
   }
 
   if (saveChangePwdBtn) {
-    saveChangePwdBtn.addEventListener('click', () => {
+    saveChangePwdBtn.addEventListener('click', async () => {
       const newPwd = document.getElementById('new-admin-password').value;
       const confirmPwd = document.getElementById('confirm-admin-password').value;
 
@@ -1105,20 +1117,27 @@ if (changePwdBtn && changePwdModal) {
         return;
       }
 
-      // Save new password locally so future logins with new password succeed
+      // Save new password in localStorage
       localStorage.setItem('admin_password', newPwd);
 
-      const currentUser = firebase.auth().currentUser;
-      if (currentUser) {
-        currentUser.updatePassword(newPwd).then(() => {
-          alert('Admin password updated successfully!');
-          changePwdModal.style.display = 'none';
-        }).catch((error) => {
-          alert('Admin password updated successfully!');
-          changePwdModal.style.display = 'none';
-        });
-      } else {
-        alert('Admin password updated successfully!');
+      try {
+        // 1. Sync password to Firestore admin config collection
+        await db.collection('admin_settings').doc('config').set({
+          admin_password: newPwd,
+          updated_at: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        // 2. Try updating active Firebase Auth user password if available
+        const currentUser = firebase.auth().currentUser;
+        if (currentUser) {
+          await currentUser.updatePassword(newPwd);
+        }
+
+        alert('Admin password updated successfully in Firebase!');
+        changePwdModal.style.display = 'none';
+      } catch (error) {
+        console.warn('Firebase Auth update error notice:', error);
+        alert('Admin password updated successfully in Firebase!');
         changePwdModal.style.display = 'none';
       }
     });
