@@ -70,15 +70,18 @@ try {
         }
       });
     }
-    // Also copy tab icon as root and admin favicon.ico & favicon.png for instant tab icon rendering
-    const iconSrc = path.join(imagesSrcDir, 'UTeMRideIcon.png');
-    if (fs.existsSync(iconSrc)) {
-      fs.copyFileSync(iconSrc, path.join(hostingDir, 'favicon.ico'));
-      fs.copyFileSync(iconSrc, path.join(hostingDir, 'favicon.png'));
-      fs.copyFileSync(iconSrc, path.join(hostingAdminDir, 'favicon.ico'));
-      fs.copyFileSync(iconSrc, path.join(hostingAdminDir, 'favicon.png'));
+    // Copy generated tab icon favicon.ico & favicon.png to hosting root & admin directory
+    const faviconPng = path.join(rootDir, 'favicon.png');
+    const faviconIco = path.join(rootDir, 'favicon.ico');
+    if (fs.existsSync(faviconPng)) {
+      fs.copyFileSync(faviconPng, path.join(hostingDir, 'favicon.png'));
+      fs.copyFileSync(faviconPng, path.join(hostingAdminDir, 'favicon.png'));
     }
-    console.log('✓ Copied assets/images directory and favicons to hosting bundle.');
+    if (fs.existsSync(faviconIco)) {
+      fs.copyFileSync(faviconIco, path.join(hostingDir, 'favicon.ico'));
+      fs.copyFileSync(faviconIco, path.join(hostingAdminDir, 'favicon.ico'));
+    }
+    console.log('✓ Copied assets/images directory and crisp favicons to hosting bundle.');
   }
 
   // 6. Check if android APK exists in assets, and copy it
