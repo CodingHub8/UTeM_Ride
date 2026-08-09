@@ -55,7 +55,25 @@ try {
     }
   });
 
-  // 5. Check if android APK exists in assets, and copy it
+  // 5. Copy assets/images directory to hosting/assets/images
+  const imagesSrcDir = path.join(rootDir, 'assets', 'images');
+  const imagesDstDir = path.join(hostingDir, 'assets', 'images');
+  if (fs.existsSync(imagesSrcDir)) {
+    fs.mkdirSync(imagesDstDir, { recursive: true });
+    if (fs.cpSync) {
+      fs.cpSync(imagesSrcDir, imagesDstDir, { recursive: true });
+    } else {
+      fs.readdirSync(imagesSrcDir).forEach(file => {
+        const srcFile = path.join(imagesSrcDir, file);
+        if (fs.statSync(srcFile).isFile()) {
+          fs.copyFileSync(srcFile, path.join(imagesDstDir, file));
+        }
+      });
+    }
+    console.log('✓ Copied assets/images directory to hosting bundle.');
+  }
+
+  // 6. Check if android APK exists in assets, and copy it
   const apkSrc = path.join(rootDir, 'assets/utem-ride.apk');
   const apkDstDir = path.join(hostingDir, 'assets');
   const apkDst = path.join(apkDstDir, 'utem-ride.apk');
