@@ -70,7 +70,13 @@ try {
         }
       });
     }
-    console.log('✓ Copied assets/images directory to hosting bundle.');
+    // Also copy tab icon as root favicon.ico & favicon.png for instant tab icon rendering
+    const iconSrc = path.join(imagesSrcDir, 'UTeMRideIcon.png');
+    if (fs.existsSync(iconSrc)) {
+      fs.copyFileSync(iconSrc, path.join(hostingDir, 'favicon.ico'));
+      fs.copyFileSync(iconSrc, path.join(hostingDir, 'favicon.png'));
+    }
+    console.log('✓ Copied assets/images directory and favicons to hosting bundle.');
   }
 
   // 6. Check if android APK exists in assets, and copy it

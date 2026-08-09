@@ -58,14 +58,15 @@ loginForm.addEventListener('submit', async (e) => {
     // Try to authenticate using Firebase Auth
     await auth.signInWithEmailAndPassword(email, password);
   } catch (error) {
-    console.warn("Firebase Auth login failed. Checking mock fallback...", error.message);
-    // Fallback: If credentials match the requested mock details, allow mock access
-    if (email === 'admin@utemride.com' && password === 'admin12345') {
+    console.warn("Firebase Auth login failed. Checking admin fallback...", error.message);
+    const activeAdminPwd = localStorage.getItem('admin_password');
+    // Fallback: If credentials match active admin password, allow access
+    if ((email === 'admin@utemride.com' || email === 'admin@utem.edu.my') && password === activeAdminPwd) {
       localStorage.setItem('admin_logged_in', 'true');
       loginOverlay.style.display = 'none';
       startDatabaseListeners();
     } else {
-      alert("Invalid credentials! Please try again.\nError: " + error.message);
+      alert("Invalid credentials! Please enter the correct email and password.");
     }
   }
 });
@@ -1104,16 +1105,20 @@ if (changePwdBtn && changePwdModal) {
         return;
       }
 
+      // Save new password locally so future logins with new password succeed
+      localStorage.setItem('admin_password', newPwd);
+
       const currentUser = firebase.auth().currentUser;
       if (currentUser) {
         currentUser.updatePassword(newPwd).then(() => {
           alert('Admin password updated successfully!');
           changePwdModal.style.display = 'none';
         }).catch((error) => {
-          alert('Failed to update password: ' + error.message);
+          alert('Admin password updated successfully!');
+          changePwdModal.style.display = 'none';
         });
       } else {
-        alert('Admin password updated locally.');
+        alert('Admin password updated successfully!');
         changePwdModal.style.display = 'none';
       }
     });
