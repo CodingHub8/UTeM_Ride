@@ -1,7 +1,7 @@
 module.exports = {
   expo: {
     name: "UTeM Ride",
-    slug: "utem-ride",
+    slug: "UTeM_Ride",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/UTeMRideIcon.png",
