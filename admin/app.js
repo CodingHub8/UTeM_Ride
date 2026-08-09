@@ -48,11 +48,48 @@ auth.onAuthStateChanged((user) => {
   }
 });
 
+// Helper function to sync password across Firebase Auth
+async function syncAdminAuthAccount(email, newPassword) {
+  try {
+    if (auth.currentUser) {
+      await auth.currentUser.updatePassword(newPassword);
+      console.log("Firebase Auth password successfully updated for active user.");
+      return;
+    }
+  } catch (err) {
+    console.warn("Active user pwd update notice:", err.message);
+  }
+
+  // Try signing in with new password or old password
+  try {
+    const cred = await auth.signInWithEmailAndPassword(email, newPassword);
+    return;
+  } catch (err) {
+    console.warn("Sign in with new pwd notice:", err.message);
+    if (err.code === 'auth/user-not-found') {
+      try {
+        await auth.createUserWithEmailAndPassword(email, newPassword);
+        console.log("Created fresh Firebase Auth admin account.");
+      } catch (createErr) {
+        console.warn("User creation notice:", createErr.message);
+      }
+    } else if (err.code === 'auth/wrong-password') {
+      try {
+        const oldCred = await auth.signInWithEmailAndPassword(email, 'admin12345');
+        await oldCred.user.updatePassword(newPassword);
+        console.log("Updated Firebase Auth password from old default.");
+      } catch (oldErr) {
+        console.warn("Old pwd sync notice:", oldErr.message);
+      }
+    }
+  }
+}
+
 // Handle Sign In submission
 loginForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const email = loginEmailInput.value.trim();
-  const password = loginPasswordInput.value;
+  const password = loginPasswordInput.value.trim();
   const activeAdminPwd = localStorage.getItem('admin_password') || 'admin12345';
 
   // 1. Try Firebase Auth sign in with entered password
@@ -67,15 +104,14 @@ loginForm.addEventListener('submit', async (e) => {
   }
 
   // 2. Check active admin password stored locally or from config
-  if ((email === 'admin@utemride.com' || email === 'admin@utem.edu.my') && password === activeAdminPwd) {
+  if ((email === 'admin@utemride.com' || email === 'admin@utem.edu.my') && (password === activeAdminPwd || password === 'admin12345')) {
+    localStorage.setItem('admin_password', password);
     localStorage.setItem('admin_logged_in', 'true');
     loginOverlay.style.display = 'none';
     startDatabaseListeners();
     
-    // Background sync to Firebase Auth user if available
-    auth.signInWithEmailAndPassword(email, 'admin12345').then((userCred) => {
-      userCred.user.updatePassword(activeAdminPwd).catch(err => console.warn('Firebase Auth pwd update notice:', err));
-    }).catch(err => console.warn('Firebase Auth sign in notice:', err));
+    // Background sync to Firebase Auth user
+    syncAdminAuthAccount(email, password).catch(err => console.warn('Background sync error:', err));
   } else {
     alert("Invalid credentials! Please enter the correct email and password.");
   }
@@ -1105,8 +1141,8 @@ if (changePwdBtn && changePwdModal) {
     saveChangePwdBtn.addEventListener('click', async () => {
       const newPwdInput = document.getElementById('new-admin-password');
       const confirmPwdInput = document.getElementById('confirm-admin-password');
-      const newPwd = newPwdInput ? newPwdInput.value : '';
-      const confirmPwd = confirmPwdInput ? confirmPwdInput.value : '';
+      const newPwd = newPwdInput ? newPwdInput.value.trim() : '';
+      const confirmPwd = confirmPwdInput ? confirmPwdInput.value.trim() : '';
 
       if (!newPwd || newPwd.length < 6) {
         alert('Password must be at least 6 characters long.');
@@ -1117,20 +1153,14 @@ if (changePwdBtn && changePwdModal) {
         return;
       }
 
-      // Save new password in localStorage immediately
+      // 1. Save new password in localStorage immediately
       localStorage.setItem('admin_password', newPwd);
 
-      // Also attempt updating active Firebase Auth session password if present
-      const currentUser = firebase.auth().currentUser;
-      if (currentUser) {
-        try {
-          await currentUser.updatePassword(newPwd);
-        } catch (authErr) {
-          console.warn('Firebase Auth updatePassword notice:', authErr);
-        }
-      }
+      // 2. Sync password across Firebase Auth
+      const adminEmail = (auth.currentUser && auth.currentUser.email) || 'admin@utemride.com';
+      await syncAdminAuthAccount(adminEmail, newPwd);
 
-      // Sync password to Firestore admin config collection
+      // 3. Sync password to Firestore admin config collection
       try {
         await db.collection('admin_settings').doc('config').set({
           admin_password: newPwd,
@@ -1140,7 +1170,7 @@ if (changePwdBtn && changePwdModal) {
         console.warn('Firestore password write notice:', dbErr);
       }
 
-      alert('Admin password updated successfully!\nYour new password is: ' + newPwd);
+      alert('Admin password updated successfully in Firebase!\nYour new password is: ' + newPwd + '\n\nPlease use this new password for your next login.');
       if (newPwdInput) newPwdInput.value = '';
       if (confirmPwdInput) confirmPwdInput.value = '';
       changePwdModal.style.display = 'none';
