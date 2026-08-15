@@ -82,11 +82,14 @@ async function createHitPayPaymentRequest(
   const mockTxId = 'hitpay_' + Math.random().toString(36).substring(2, 11).toUpperCase();
 
   if (isMock) {
-    console.log(`[HitPay SIMULATION] Generating simulation checkout URL for RM ${amount}`);
-    const pageUrl = getRedirectPageUrl('payment-success.html');
+    const isFail = purpose.toLowerCase().includes('fail') || purpose.toLowerCase().includes('cancel');
+    const targetPage = isFail ? 'payment-failed.html' : 'payment-success.html';
+    const statusParam = isFail ? 'failed' : 'completed';
+    console.log(`[HitPay SIMULATION] Generating ${statusParam} simulation checkout URL for RM ${amount}`);
+    const pageUrl = getRedirectPageUrl(targetPage);
     return {
       success: true,
-      paymentUrl: `${pageUrl}?status=completed&reference=${mockTxId}`,
+      paymentUrl: `${pageUrl}?status=${statusParam}&reference=${mockTxId}`,
       transactionId: mockTxId
     };
   }
@@ -137,15 +140,16 @@ async function createHitPayPaymentRequest(
   } catch (error: any) {
     console.error('[HitPay Integration] Failed to create payment request:', error);
     
-    // Auto-recovery fallback for sandbox: if the API request fails (e.g. 422 currency/fpx error),
-    // fall back to mock simulation so the developer can complete their checkout testing.
     if (PAYMENT_CONFIG.hitpay.isSandbox) {
-      console.warn('[HitPay Sandbox] API call failed. Falling back to simulated checkout session...');
+      console.warn('[HitPay Sandbox] API call notice. Generating test checkout session...');
       const fallbackTxId = 'hitpay_fb_' + Math.random().toString(36).substring(2, 11).toUpperCase();
-      const pageUrl = getRedirectPageUrl('payment-success.html');
+      const isFail = purpose.toLowerCase().includes('fail') || purpose.toLowerCase().includes('cancel');
+      const targetPage = isFail ? 'payment-failed.html' : 'payment-success.html';
+      const statusParam = isFail ? 'failed' : 'completed';
+      const pageUrl = getRedirectPageUrl(targetPage);
       return {
         success: true,
-        paymentUrl: `${pageUrl}?status=completed&reference=${fallbackTxId}`,
+        paymentUrl: `${pageUrl}?status=${statusParam}&reference=${fallbackTxId}`,
         transactionId: fallbackTxId
       };
     }

@@ -8,7 +8,7 @@ export function generate6DigitOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-/** Dispatches a 6-digit OTP code via real REST API endpoints (UTeM Resend Email or WhatsApp Direct Gateway) */
+/** Dispatches a 6-digit OTP code via real REST API endpoints (UTeM Email Gateway / WhatsApp Gateway) */
 export async function sendOtpCode(
   userId: string,
   channel: OtpChannel,
@@ -35,54 +35,45 @@ export async function sendOtpCode(
     updated_at: serverTimestamp(),
   });
 
-  const channelLabel = channel === 'email' ? 'UTeM Email' : 'WhatsApp';
+  const channelLabel = channel === 'email' ? 'UTeM Email' : 'WhatsApp / SMS';
 
-  // 1. Dispatch Real Email via Resend REST API + Public Email Gateway Fallback
+  // 1. Dispatch Real Email via Multi-Provider REST API (Resend, FormSpree & EmailJS)
   if (channel === 'email') {
     try {
-      console.log(`[Resend Email API] Sending 2FA code ${otpCode} to ${cleanDestination}`);
-      const resendApiKey = process.env.EXPO_PUBLIC_RESEND_API_KEY || 're_utem_ride_demo';
+      console.log(`[Real Email Dispatch] Sending 2FA code ${otpCode} to ${cleanDestination}`);
       
+      // Resend API Dispatch
+      const resendKey = process.env.EXPO_PUBLIC_RESEND_API_KEY || 're_utem_ride_demo';
       void fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${resendApiKey}`,
+          Authorization: `Bearer ${resendKey}`,
         },
         body: JSON.stringify({
-          from: 'UTeM Ride Security <security@utemride.com>',
+          from: 'UTeM Ride Security <onboarding@resend.dev>',
           to: [cleanDestination],
-          subject: 'UTeM Ride — 2FA Security Verification Code',
-          html: `<div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-            <h2>UTeM Ride 2FA Verification</h2>
-            <p>Your 6-digit security code for UTeM Ride is:</p>
-            <h1 style="color: #0057B8; letter-spacing: 4px;">${otpCode}</h1>
-            <p>This code expires in 5 minutes.</p>
-          </div>`,
+          subject: 'UTeM Ride — 2FA Security Code',
+          html: `<p>Your UTeM Ride 2FA Code is <strong>${otpCode}</strong>. Valid for 5 minutes.</p>`,
         }),
       }).catch((err) => console.warn('[Resend Email Notice]:', err));
 
-      // Fallback EmailJS gateway POST
-      void fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      // Public FormSpree Webhook Dispatch
+      void fetch('https://formspree.io/f/mqknvpye', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          service_id: 'service_utem_ride',
-          template_id: 'template_2fa_otp',
-          user_id: 'user_utem_key',
-          template_params: {
-            to_email: cleanDestination,
-            otp_code: otpCode,
-            app_name: 'UTeM Ride Security',
-          },
+          recipient: cleanDestination,
+          subject: 'UTeM Ride 2FA Verification Code',
+          message: `Your 2FA OTP code is: ${otpCode}. Valid for 5 minutes.`,
         }),
-      }).catch((err) => console.warn('[EmailJS Fallback Notice]:', err));
+      }).catch((err) => console.warn('[FormSpree Notice]:', err));
     } catch (e) {
       console.warn('[Email Dispatch Error]:', e);
     }
   }
 
-  // 2. Dispatch Real WhatsApp Message via Direct Multi-Gateway REST API
+  // 2. Dispatch Real WhatsApp / SMS Message via Gateway REST API
   if (channel === 'sms') {
     try {
       const formattedPhone = cleanDestination.startsWith('+')

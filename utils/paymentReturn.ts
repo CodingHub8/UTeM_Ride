@@ -97,9 +97,9 @@ export async function waitForHitPayReturn(input: {
       }
     });
 
-    const redirectUrl = 'https://project-utem-ride.web.app/payment-success.html';
+    const redirectSuccessUrl = 'https://project-utem-ride.web.app/payment-success.html';
 
-    WebBrowser.openAuthSessionAsync(input.checkoutUrl, redirectUrl)
+    WebBrowser.openAuthSessionAsync(input.checkoutUrl, redirectSuccessUrl)
       .then(async (authResult) => {
         if (settled) return;
         clearPaymentWaiter();
