@@ -48,6 +48,20 @@ auth.onAuthStateChanged((user) => {
   }
 });
 
+// SHA-256 Hashing Helper for Password Encryption
+async function hashAdminPassword(password) {
+  try {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password + "_utemride_salt_2026");
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (err) {
+    console.warn("Crypto API fallback notice:", err);
+    return btoa(password + "_utemride_salt");
+  }
+}
+
 // Helper function to sync password across Firebase Auth
 async function syncAdminAuthAccount(email, newPassword) {
   try {
@@ -103,7 +117,24 @@ loginForm.addEventListener('submit', async (e) => {
     console.warn("Firebase Auth login attempt:", error.message);
   }
 
-  // 2. Check active admin password stored locally or from config
+  // 2. Check Firestore encrypted password hash if available
+  try {
+    const configDoc = await db.collection('admin_settings').doc('config').get();
+    if (configDoc.exists && configDoc.data().admin_password_hash) {
+      const enteredHash = await hashAdminPassword(password);
+      if (enteredHash === configDoc.data().admin_password_hash) {
+        localStorage.setItem('admin_password', password);
+        localStorage.setItem('admin_logged_in', 'true');
+        loginOverlay.style.display = 'none';
+        startDatabaseListeners();
+        return;
+      }
+    }
+  } catch (dbErr) {
+    console.warn("Firestore password hash check notice:", dbErr);
+  }
+
+  // 3. Check active admin password stored locally or default
   if ((email === 'admin@utemride.com' || email === 'admin@utem.edu.my') && (password === activeAdminPwd || password === 'admin12345')) {
     localStorage.setItem('admin_password', password);
     localStorage.setItem('admin_logged_in', 'true');
@@ -1160,14 +1191,16 @@ if (changePwdBtn && changePwdModal) {
       const adminEmail = (auth.currentUser && auth.currentUser.email) || 'admin@utemride.com';
       await syncAdminAuthAccount(adminEmail, newPwd);
 
-      // 3. Sync password to Firestore admin config collection
+      // 3. Sync encrypted password hash to Firestore admin config collection
       try {
+        const passwordHash = await hashAdminPassword(newPwd);
         await db.collection('admin_settings').doc('config').set({
-          admin_password: newPwd,
+          admin_password_hash: passwordHash,
+          encrypted: true,
           updated_at: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
       } catch (dbErr) {
-        console.warn('Firestore password write notice:', dbErr);
+        console.warn('Firestore password hash write notice:', dbErr);
       }
 
       alert('Admin password updated successfully in Firebase!\nYour new password is: ' + newPwd + '\n\nPlease use this new password for your next login.');

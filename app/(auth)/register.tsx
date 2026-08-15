@@ -492,13 +492,15 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.bold,
   },
   suggestionsScroll: {
-    marginTop: -Spacing.sm,
-    marginBottom: Spacing.md,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.sm,
+    zIndex: 10,
   },
   suggestionsContainer: {
     flexDirection: 'row',
     gap: Spacing.xs,
     paddingVertical: 4,
+    paddingHorizontal: 2,
   },
   suggestionChip: {
     paddingHorizontal: 12,

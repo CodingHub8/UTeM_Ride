@@ -132,5 +132,20 @@ export async function processHitPayCheckout(input: {
   });
 
   await updatePaymentStatus(paymentId, result.success ? 'completed' : 'failed');
+
+  if (result.success) {
+    Alert.alert(
+      'Payment Successful! 🎉',
+      `RM ${input.amount.toFixed(2)} has been successfully confirmed and processed for ${input.purpose}.`,
+      [{ text: 'OK' }]
+    );
+  } else {
+    Alert.alert(
+      'Payment Not Completed',
+      'The payment transaction was not completed. If you were charged, please contact UTeM Ride support.',
+      [{ text: 'OK' }]
+    );
+  }
+
   return result;
 }

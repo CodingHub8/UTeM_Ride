@@ -331,12 +331,14 @@ const styles = StyleSheet.create({
   },
   suggestionsScroll: {
     marginTop: Spacing.xs,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
+    zIndex: 10,
   },
   suggestionsContainer: {
     flexDirection: 'row',
     gap: Spacing.xs,
     paddingVertical: 4,
+    paddingHorizontal: 2,
   },
   suggestionChip: {
     paddingHorizontal: 12,
