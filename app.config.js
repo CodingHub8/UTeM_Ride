@@ -46,7 +46,7 @@ module.exports = {
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/UTeMRideLogoBlue.png",
+          "image": "./assets/images/UTeMRideIconWhiteTextTransparent.png",
           "imageWidth": 250,
           "resizeMode": "contain",
           "backgroundColor": "#0057B8",

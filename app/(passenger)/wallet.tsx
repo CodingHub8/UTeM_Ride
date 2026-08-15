@@ -532,23 +532,6 @@ export default function PassengerWalletScreen() {
                 </TouchableOpacity>
               </View>
 
-              {topupPayMethod === 'fpx' && (
-                <View style={styles.formGroup}>
-                  <Text style={[styles.formLabel, dynamicStyles.subText]}>Choose Bank</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 4 }}>
-                    {MALAYSIAN_BANKS.map((b) => (
-                      <TouchableOpacity
-                        key={b}
-                        style={[styles.bankChip, selectedBank === b && styles.bankChipActive]}
-                        onPress={() => setSelectedBank(b)}
-                      >
-                        <Text style={[styles.bankChipText, dynamicStyles.text, selectedBank === b && { color: Colors.primary, fontWeight: 'bold' }]}>{b}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-
               <TouchableOpacity style={styles.modalActionBtn} onPress={handleConfirmTopup} disabled={topupLoading}>
                 {topupLoading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.modalActionText}>Proceed to Pay</Text>}
               </TouchableOpacity>

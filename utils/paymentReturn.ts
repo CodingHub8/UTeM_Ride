@@ -83,33 +83,52 @@ export async function waitForHitPayReturn(input: {
       }
     });
 
-    void WebBrowser.openBrowserAsync(input.checkoutUrl, {
-      showInRecents: false,
-      enableBarCollapsing: true,
-    }).then((browserResult) => {
-      if (settled) return;
-      clearPaymentWaiter();
+    const redirectUrl = 'https://project-utem-ride.web.app/payment-success.html';
 
-      if (browserResult.type === 'cancel' || browserResult.type === 'dismiss') {
+    WebBrowser.openAuthSessionAsync(input.checkoutUrl, redirectUrl)
+      .then((authResult) => {
+        if (settled) return;
+        clearPaymentWaiter();
+
+        if (authResult.type === 'success') {
+          finish({ success: true, paymentId: input.paymentId, hitpayId: input.hitpayId });
+          return;
+        }
+
         Alert.alert(
-          'Payment',
-          'Did you finish paying on HitPay?',
+          'Payment Status',
+          'Did you complete your payment on HitPay?',
           [
             {
-              text: 'No',
+              text: 'No, Cancelled',
               style: 'cancel',
               onPress: () => finish({ success: false, paymentId: input.paymentId, hitpayId: input.hitpayId }),
             },
             {
-              text: 'Yes, paid',
+              text: 'Yes, Payment Completed',
               onPress: () => finish({ success: true, paymentId: input.paymentId, hitpayId: input.hitpayId }),
             },
           ]
         );
-        return;
-      }
-
-      finish({ success: false, paymentId: input.paymentId, hitpayId: input.hitpayId });
-    });
+      })
+      .catch((err) => {
+        console.warn('[WebBrowser AuthSession] Fallback to openBrowserAsync:', err);
+        void WebBrowser.openBrowserAsync(input.checkoutUrl, { showInRecents: false }).then((browserResult) => {
+          if (settled) return;
+          clearPaymentWaiter();
+          if (browserResult.type === 'cancel' || browserResult.type === 'dismiss') {
+            Alert.alert(
+              'Payment Status',
+              'Did you complete your online payment?',
+              [
+                { text: 'No', style: 'cancel', onPress: () => finish({ success: false, paymentId: input.paymentId, hitpayId: input.hitpayId }) },
+                { text: 'Yes, Paid', onPress: () => finish({ success: true, paymentId: input.paymentId, hitpayId: input.hitpayId }) },
+              ]
+            );
+            return;
+          }
+          finish({ success: false, paymentId: input.paymentId, hitpayId: input.hitpayId });
+        });
+      });
   });
 }

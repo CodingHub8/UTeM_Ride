@@ -94,7 +94,7 @@ export default function TwoFactorModal({
 
       Alert.alert(
         'OTP Sent Successfully 📲',
-        `${result.message}\n\n[Testing Code]: ${result.otpCode}`
+        result.message
       );
     } catch (e: any) {
       Alert.alert('Send Error', e.message || 'Could not send OTP code.');
