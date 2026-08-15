@@ -34,7 +34,7 @@ try {
   const hostingAdminDir = path.join(hostingDir, 'admin');
   fs.mkdirSync(hostingAdminDir, { recursive: true });
 
-  const adminFiles = ['index.html', 'app.js', 'style.css', 'payment-success.html', 'payment-failed.html'];
+  const adminFiles = ['index.html', 'app.js', 'style.css', 'payment-success.html', 'payment-failed.html', 'email-verify.html'];
   adminFiles.forEach(file => {
     const src = path.join(adminDir, file);
     const dst = path.join(hostingAdminDir, file);

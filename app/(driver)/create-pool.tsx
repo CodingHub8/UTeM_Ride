@@ -259,20 +259,58 @@ export default function CreatePoolScreen() {
         updated_at: serverTimestamp(),
       });
 
-      // Write driver earnings transaction record
       const seatPrice = parseFloat(pool.price_per_seat) || 0;
+      const isCashBooking = (booking.payment_method || 'cash') === 'cash';
+
+      // Enforce 3-Ride Cash Quota for drivers
+      if (isCashBooking && user?.id) {
+        const userRef = doc(db, 'users', user.id);
+        const userSnap = await getDoc(userRef);
+        const cashCount = userSnap.data()?.consecutive_cash_rides || 0;
+        if (cashCount >= 3) {
+          Alert.alert(
+            'Cash Quota Reached (3/3)',
+            'You have completed 3 consecutive cash rides. Please accept at least 1 online payment ride before accepting another cash ride.'
+          );
+          return;
+        }
+        await updateDoc(userRef, { consecutive_cash_rides: increment(1) });
+      } else if (!isCashBooking && user?.id) {
+        // Reset cash quota after an online payment ride
+        await updateDoc(doc(db, 'users', user.id), { consecutive_cash_rides: 0 });
+      }
+
       if (seatPrice > 0 && user?.id) {
-        await addDoc(collection(db, 'transactions'), {
-          user_id: user.id,
-          amount: seatPrice,
-          payment_method: booking.payment_method || 'cash',
-          transaction_type: 'carpool_earning',
-          label: `Carpool Earning from ${booking.passenger_name || 'Passenger'}`,
-          role: 'driver',
-          status: 'completed',
-          ride_id: pool.id,
-          created_at: serverTimestamp(),
-        });
+        const platformFee = Number((seatPrice * 0.10).toFixed(2));
+        const netDriverEarning = Number((seatPrice - platformFee).toFixed(2));
+
+        if (isCashBooking) {
+          // Passenger paid cash directly to driver. Deduct ONLY 10% ride fee from driver wallet
+          await addDoc(collection(db, 'transactions'), {
+            user_id: user.id,
+            amount: -platformFee,
+            payment_method: 'cash',
+            transaction_type: 'service_fee',
+            label: `Cash Ride 10% Transaction Fee (Fare: RM ${seatPrice.toFixed(2)})`,
+            role: 'driver',
+            status: 'completed',
+            ride_id: pool.id,
+            created_at: serverTimestamp(),
+          });
+        } else {
+          // Online payment: credit net driver earning (Fare minus 10% Fee)
+          await addDoc(collection(db, 'transactions'), {
+            user_id: user.id,
+            amount: netDriverEarning,
+            payment_method: booking.payment_method || 'fpx',
+            transaction_type: 'carpool_earning',
+            label: `Ride Earning from ${booking.passenger_name || 'Passenger'} (RM ${seatPrice.toFixed(2)} - RM ${platformFee.toFixed(2)} Transaction Fee)`,
+            role: 'driver',
+            status: 'completed',
+            ride_id: pool.id,
+            created_at: serverTimestamp(),
+          });
+        }
       }
 
       // Notify passenger

@@ -45,7 +45,7 @@ export async function sendOtpCode(
     try {
       console.log(`[Pure Firebase Auth Email] Dispatching native email link for ${cleanDestination}`);
       const actionCodeSettings = {
-        url: 'https://project-utem-ride.web.app/payment-success.html',
+        url: `https://project-utem-ride.web.app/email-verify.html?userId=${userId}`,
         handleCodeInApp: true,
       };
       await sendSignInLinkToEmail(auth, cleanDestination, actionCodeSettings);

@@ -175,8 +175,8 @@ export default function PassengerWalletScreen() {
 
   const handleConfirmWithdraw = async () => {
     const numericAmount = parseFloat(withdrawAmountInput);
-    if (isNaN(numericAmount) || numericAmount <= 1) {
-      Alert.alert('Invalid Amount', 'The minimum withdrawal limit is RM 2.00 to cover the RM 1.00 payment gateway transfer fee.');
+    if (isNaN(numericAmount) || numericAmount < 1) {
+      Alert.alert('Invalid Amount', 'The minimum withdrawal limit is RM 1.00.');
       return;
     }
     if (numericAmount > walletBalance) {

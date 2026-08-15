@@ -167,7 +167,7 @@ export async function cancelAndRefundRide(
     cancelled_at: serverTimestamp(),
   });
 
-  if (paymentMethod !== 'cash') {
+  if (paymentMethod !== 'cash' && fareAmount > 0) {
     const q = query(
       collection(db, 'transactions'),
       where('ride_id', '==', rideId),
@@ -176,27 +176,24 @@ export async function cancelAndRefundRide(
     );
     const snap = await getDocs(q);
     const batch = writeBatch(db);
-    let hasHeld = false;
 
     snap.forEach((d) => {
       batch.update(d.ref, { status: 'refunded' });
-      hasHeld = true;
     });
 
-    if (hasHeld) {
-      const refundRef = doc(collection(db, 'transactions'));
-      batch.set(refundRef, {
-        user_id: passengerId,
-        ride_id: rideId,
-        amount: fareAmount, // credit refund
-        payment_method: paymentMethod,
-        transaction_type: 'refund',
-        label: `Refund: Ride cancelled (${paymentLabel || paymentMethod})`,
-        role: 'passenger',
-        status: 'completed',
-        created_at: serverTimestamp(),
-      });
-    }
+    const refundRef = doc(collection(db, 'transactions'));
+    batch.set(refundRef, {
+      user_id: passengerId,
+      ride_id: rideId,
+      amount: fareAmount, // positive refund credit
+      payment_method: paymentMethod,
+      transaction_type: 'refund',
+      label: `Refund: Ride cancelled/expired (${paymentLabel || paymentMethod})`,
+      role: 'passenger',
+      status: 'completed',
+      created_at: serverTimestamp(),
+    });
+
     await batch.commit();
   }
 }
