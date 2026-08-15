@@ -65,7 +65,7 @@ export default function SplashScreen() {
       <Animated.View style={[styles.logoContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
         <Image
           source={require('@/assets/images/UTeMRideIconWhiteTextTransparent.png')}
-          style={{ width: 320, height: 160, resizeMode: 'contain' }}
+          style={{ width: '80%', maxWidth: 280, height: 120, resizeMode: 'contain' }}
         />
       </Animated.View>
 

@@ -385,6 +385,7 @@ export default function DriverProfileScreen() {
           onClose={() => setShow2FA(false)}
           userId={user.id}
           email={user.email}
+          phoneNumber={user.phone}
           onVerified={refreshProfile}
           isDark={isDark}
         />

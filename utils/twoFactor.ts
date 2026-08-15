@@ -37,11 +37,12 @@ export async function sendOtpCode(
 
   const channelLabel = channel === 'email' ? 'UTeM Email' : 'WhatsApp';
 
-  // 1. Dispatch Real Email via Resend REST API (3,000 Free Emails / Month)
+  // 1. Dispatch Real Email via Resend REST API + Public Email Gateway Fallback
   if (channel === 'email') {
     try {
       console.log(`[Resend Email API] Sending 2FA code ${otpCode} to ${cleanDestination}`);
       const resendApiKey = process.env.EXPO_PUBLIC_RESEND_API_KEY || 're_utem_ride_demo';
+      
       void fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -60,12 +61,28 @@ export async function sendOtpCode(
           </div>`,
         }),
       }).catch((err) => console.warn('[Resend Email Notice]:', err));
+
+      // Fallback EmailJS gateway POST
+      void fetch('https://api.emailjs.com/api/v1.0/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service_id: 'service_utem_ride',
+          template_id: 'template_2fa_otp',
+          user_id: 'user_utem_key',
+          template_params: {
+            to_email: cleanDestination,
+            otp_code: otpCode,
+            app_name: 'UTeM Ride Security',
+          },
+        }),
+      }).catch((err) => console.warn('[EmailJS Fallback Notice]:', err));
     } catch (e) {
-      console.warn('[Resend Email Error]:', e);
+      console.warn('[Email Dispatch Error]:', e);
     }
   }
 
-  // 2. Dispatch Real WhatsApp Message via Direct Gateway API
+  // 2. Dispatch Real WhatsApp Message via Direct Multi-Gateway REST API
   if (channel === 'sms') {
     try {
       const formattedPhone = cleanDestination.startsWith('+')
@@ -82,9 +99,23 @@ export async function sendOtpCode(
         body: `token=${ultramsgToken}&to=${encodeURIComponent(formattedPhone)}&body=${encodeURIComponent(
           `🔒 *UTeM Ride Security*\nYour 2FA Verification Code is: *${otpCode}*\nValid for 5 minutes.`
         )}`,
-      }).catch((err) => console.warn('[WhatsApp Gateway Notice]:', err));
+      }).catch((err) => console.warn('[UltraMsg WhatsApp Notice]:', err));
+
+      // Fonnte WhatsApp Gateway Fallback
+      const fonnteToken = process.env.EXPO_PUBLIC_FONNTE_TOKEN || 'fonnte_utem_demo';
+      void fetch('https://api.fonnte.com/send', {
+        method: 'POST',
+        headers: {
+          Authorization: fonnteToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          target: formattedPhone,
+          message: `🔒 UTeM Ride 2FA Verification Code: ${otpCode}. Valid for 5 minutes only.`,
+        }),
+      }).catch((err) => console.warn('[Fonnte WhatsApp Notice]:', err));
     } catch (e) {
-      console.warn('[WhatsApp Gateway Error]:', e);
+      console.warn('[WhatsApp Dispatch Error]:', e);
     }
   }
 

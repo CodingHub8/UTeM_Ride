@@ -392,6 +392,7 @@ export default function DriverHomeScreen() {
           onClose={() => setShow2FA(false)}
           userId={user.id}
           email={user.email}
+          phoneNumber={user.phone}
           onVerified={refreshProfile}
           isDark={isDark}
         />
