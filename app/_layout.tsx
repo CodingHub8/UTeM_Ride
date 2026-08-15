@@ -8,6 +8,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { Colors } from '@/constants/theme';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { GlobalPaymentWebView } from '@/utils/paymentReturn';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -40,6 +41,7 @@ function MainLayout() {
         <Stack.Screen name="(driver)" />
         <Stack.Screen name="payment-complete" options={{ headerShown: false, presentation: 'modal' }} />
       </Stack>
+      <GlobalPaymentWebView />
     </Animated.View>
   );
 }

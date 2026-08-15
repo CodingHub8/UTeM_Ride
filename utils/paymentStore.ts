@@ -123,5 +123,9 @@ export async function processHitPayCheckout(input: {
     );
   }
 
-  return result;
+  return {
+    success: result.success,
+    paymentId: result.paymentId,
+    hitpayId: result.hitpayId || hitpayResult.transactionId,
+  };
 }
