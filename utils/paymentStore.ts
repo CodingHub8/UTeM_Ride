@@ -99,31 +99,7 @@ export async function processHitPayCheckout(input: {
     status: 'pending',
   });
 
-  if (PAYMENT_CONFIG.hitpay.devSimulate) {
-    return new Promise((resolve) => {
-      Alert.alert(
-        'Sandbox Payment',
-        `HitPay session created (ID: ${hitpayResult.transactionId.slice(0, 8)}…).\n\nTouch 'n Go / DuitNow do not work in HitPay sandbox and show "Unknown error".\n\nSimulate a successful payment for testing?`,
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: async () => {
-              await updatePaymentStatus(paymentId, 'cancelled');
-              resolve({ success: false, paymentId, hitpayId: hitpayResult.transactionId });
-            },
-          },
-          {
-            text: 'Simulate paid',
-            onPress: async () => {
-              await updatePaymentStatus(paymentId, 'completed');
-              resolve({ success: true, paymentId, hitpayId: hitpayResult.transactionId });
-            },
-          },
-        ]
-      );
-    });
-  }
+
 
   const result = await waitForHitPayReturn({
     paymentId,
