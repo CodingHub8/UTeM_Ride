@@ -141,8 +141,8 @@ export async function processHitPayCheckout(input: {
     );
   } else {
     Alert.alert(
-      'Payment Not Completed',
-      'The payment transaction was not completed. If you were charged, please contact UTeM Ride support.',
+      'Payment Failed / Cancelled',
+      '',
       [{ text: 'OK' }]
     );
   }

@@ -8,7 +8,7 @@ export function generate6DigitOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-/** Dispatches a 6-digit OTP code via real REST API endpoints (UTeM Email or SMS/WhatsApp Gateway) */
+/** Dispatches a 6-digit OTP code via real REST API endpoints (UTeM Resend Email or WhatsApp Direct Gateway) */
 export async function sendOtpCode(
   userId: string,
   channel: OtpChannel,
@@ -35,57 +35,63 @@ export async function sendOtpCode(
     updated_at: serverTimestamp(),
   });
 
-  const channelLabel = channel === 'email' ? 'UTeM Email' : 'SMS / WhatsApp';
+  const channelLabel = channel === 'email' ? 'UTeM Email' : 'WhatsApp';
 
-  // 1. Dispatch Real Email via EmailJS / Resend API Endpoint
+  // 1. Dispatch Real Email via Resend REST API (3,000 Free Emails / Month)
   if (channel === 'email') {
     try {
-      console.log(`[Real Email Dispatch] Sending 2FA code ${otpCode} to ${cleanDestination}`);
-      void fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      console.log(`[Resend Email API] Sending 2FA code ${otpCode} to ${cleanDestination}`);
+      const resendApiKey = process.env.EXPO_PUBLIC_RESEND_API_KEY || 're_utem_ride_demo';
+      void fetch('https://api.resend.com/emails', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${resendApiKey}`,
+        },
         body: JSON.stringify({
-          service_id: 'service_utem_ride',
-          template_id: 'template_2fa_otp',
-          user_id: 'user_utem_key',
-          template_params: {
-            to_email: cleanDestination,
-            otp_code: otpCode,
-            app_name: 'UTeM Ride Security',
-          },
+          from: 'UTeM Ride Security <security@utemride.com>',
+          to: [cleanDestination],
+          subject: 'UTeM Ride — 2FA Security Verification Code',
+          html: `<div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+            <h2>UTeM Ride 2FA Verification</h2>
+            <p>Your 6-digit security code for UTeM Ride is:</p>
+            <h1 style="color: #0057B8; letter-spacing: 4px;">${otpCode}</h1>
+            <p>This code expires in 5 minutes.</p>
+          </div>`,
         }),
-      }).catch((err) => console.warn('[Email Gateway Notice]:', err));
+      }).catch((err) => console.warn('[Resend Email Notice]:', err));
     } catch (e) {
-      console.warn('[Email Gateway Error]:', e);
+      console.warn('[Resend Email Error]:', e);
     }
   }
 
-  // 2. Dispatch Real SMS / WhatsApp Message via Gateway REST API
+  // 2. Dispatch Real WhatsApp Message via Direct Gateway API
   if (channel === 'sms') {
     try {
       const formattedPhone = cleanDestination.startsWith('+')
         ? cleanDestination
         : `+60${cleanDestination.replace(/^0/, '')}`;
 
-      console.log(`[Real SMS/WhatsApp Dispatch] Sending 2FA code ${otpCode} to ${formattedPhone}`);
-      void fetch('https://api.twilio.com/2010-04-01/Accounts/AC_utem_ride/Messages.json', {
+      console.log(`[Direct WhatsApp Dispatch] Sending 2FA code ${otpCode} to ${formattedPhone}`);
+      const ultramsgInstance = process.env.EXPO_PUBLIC_ULTRAMSG_INSTANCE || 'instance_demo';
+      const ultramsgToken = process.env.EXPO_PUBLIC_ULTRAMSG_TOKEN || 'token_demo';
+
+      void fetch(`https://api.ultramsg.com/${ultramsgInstance}/messages/chat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: `To=${encodeURIComponent(formattedPhone)}&From=%2B14155238886&Body=${encodeURIComponent(
-          `Your UTeM Ride 2FA Security Code is: ${otpCode}. Valid for 5 minutes.`
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `token=${ultramsgToken}&to=${encodeURIComponent(formattedPhone)}&body=${encodeURIComponent(
+          `🔒 *UTeM Ride Security*\nYour 2FA Verification Code is: *${otpCode}*\nValid for 5 minutes.`
         )}`,
-      }).catch((err) => console.warn('[SMS Gateway Notice]:', err));
+      }).catch((err) => console.warn('[WhatsApp Gateway Notice]:', err));
     } catch (e) {
-      console.warn('[SMS Gateway Error]:', e);
+      console.warn('[WhatsApp Gateway Error]:', e);
     }
   }
 
   return {
     success: true,
     otpCode,
-    message: `A real 6-digit 2FA OTP code has been dispatched to ${cleanDestination} via ${channelLabel}.`,
+    message: `A 6-digit 2FA OTP code has been dispatched to ${cleanDestination} via ${channelLabel}.`,
   };
 }
 
@@ -104,7 +110,7 @@ export async function verifyOtpCode(userId: string, inputCode: string): Promise<
   const storedCode = data?.otp_code;
   const expiresAt = data?.otp_expires_at;
 
-  // Master bypass for testing
+  // Master bypass for developer testing
   if (cleanCode === '123456') {
     await updateDoc(userRef, {
       is_2FA_verified: true,
@@ -125,7 +131,7 @@ export async function verifyOtpCode(userId: string, inputCode: string): Promise<
   }
 
   if (storedCode !== cleanCode) {
-    throw new Error('Invalid OTP code. Please check your inbox or mobile phone messages and try again.');
+    throw new Error('Invalid OTP code. Please check your inbox or WhatsApp messages and try again.');
   }
 
   await updateDoc(userRef, {

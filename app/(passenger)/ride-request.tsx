@@ -102,17 +102,22 @@ export default function RideRequestScreen() {
       setPaymentLabel('E-Wallet');
       setEncryptedPaymentDetails('');
       setShowPaymentModal(false);
+    } else if (method === 'fpx') {
+      setPaymentMethod('fpx');
+      setPaymentLabel('FPX Online Banking');
+      setSelectedBank('HitPay FPX Gateway');
+      setEncryptedPaymentDetails(encryptData(JSON.stringify({ method: 'fpx', timestamp: Date.now() })));
+      setShowPaymentModal(false);
     } else {
       setPaymentStep(method);
     }
   };
 
-  const confirmFPX = (bank: string) => {
+  const confirmFPX = (bank: string = 'FPX Gateway') => {
     setSelectedBank(bank);
     setPaymentMethod('fpx');
-    setPaymentLabel(`FPX (${bank})`);
+    setPaymentLabel('FPX Online Banking');
 
-    // Encrypt the payment token/bank metadata client-side
     const encrypted = encryptData(JSON.stringify({ bank, timestamp: Date.now() }));
     setEncryptedPaymentDetails(encrypted);
 
@@ -528,21 +533,6 @@ export default function RideRequestScreen() {
                   {paymentMethod === 'card' && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />}
                 </TouchableOpacity>
               </View>
-            )}
-
-            {/* Step: FPX Selection */}
-            {paymentStep === 'fpx' && (
-              <ScrollView style={{ maxHeight: 250 }}>
-                {['Maybank2u', 'CIMB Clicks', 'Bank Islam', 'RHB Now', 'Public Bank'].map((bank) => (
-                  <TouchableOpacity
-                    key={bank}
-                    style={[styles.bankItem, { borderColor: isDark ? Colors.darkBorder : Colors.gray200 }]}
-                    onPress={() => confirmFPX(bank)}
-                  >
-                    <Text style={[styles.bankItemText, dynamicStyles.text]}>{bank}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
             )}
 
             {/* Step: Card Details Entry */}

@@ -1,6 +1,7 @@
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
-import { Alert } from 'react-native';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/utils/firebase';
 
 export type PaymentCheckoutResult = {
   success: boolean;
@@ -55,6 +56,19 @@ export async function fulfillPaymentFromDeepLink(url: string): Promise<PaymentCh
   return settleWaiter(true);
 }
 
+/** Verifies that the payment has actually been recorded as completed in Firestore */
+async function checkFirestorePaymentCompleted(paymentId: string): Promise<boolean> {
+  try {
+    const payDoc = await getDoc(doc(db, 'payments', paymentId));
+    if (payDoc.exists()) {
+      return payDoc.data()?.status === 'completed';
+    }
+  } catch (err) {
+    console.warn('[PaymentVerification] Firestore lookup notice:', err);
+  }
+  return false;
+}
+
 export async function waitForHitPayReturn(input: {
   paymentId: string;
   hitpayId: string;
@@ -86,7 +100,7 @@ export async function waitForHitPayReturn(input: {
     const redirectUrl = 'https://project-utem-ride.web.app/payment-success.html';
 
     WebBrowser.openAuthSessionAsync(input.checkoutUrl, redirectUrl)
-      .then((authResult) => {
+      .then(async (authResult) => {
         if (settled) return;
         clearPaymentWaiter();
 
@@ -95,40 +109,18 @@ export async function waitForHitPayReturn(input: {
           return;
         }
 
-        Alert.alert(
-          'Payment Status',
-          'Did you complete your payment on HitPay?',
-          [
-            {
-              text: 'No, Cancelled',
-              style: 'cancel',
-              onPress: () => finish({ success: false, paymentId: input.paymentId, hitpayId: input.hitpayId }),
-            },
-            {
-              text: 'Yes, Payment Completed',
-              onPress: () => finish({ success: true, paymentId: input.paymentId, hitpayId: input.hitpayId }),
-            },
-          ]
-        );
+        // Strict verification: check if Firestore was updated to 'completed'
+        const isVerified = await checkFirestorePaymentCompleted(input.paymentId);
+        finish({ success: isVerified, paymentId: input.paymentId, hitpayId: input.hitpayId });
       })
-      .catch((err) => {
+      .catch(async (err) => {
         console.warn('[WebBrowser AuthSession] Fallback to openBrowserAsync:', err);
-        void WebBrowser.openBrowserAsync(input.checkoutUrl, { showInRecents: false }).then((browserResult) => {
-          if (settled) return;
-          clearPaymentWaiter();
-          if (browserResult.type === 'cancel' || browserResult.type === 'dismiss') {
-            Alert.alert(
-              'Payment Status',
-              'Did you complete your online payment?',
-              [
-                { text: 'No', style: 'cancel', onPress: () => finish({ success: false, paymentId: input.paymentId, hitpayId: input.hitpayId }) },
-                { text: 'Yes, Paid', onPress: () => finish({ success: true, paymentId: input.paymentId, hitpayId: input.hitpayId }) },
-              ]
-            );
-            return;
-          }
-          finish({ success: false, paymentId: input.paymentId, hitpayId: input.hitpayId });
-        });
+        await WebBrowser.openBrowserAsync(input.checkoutUrl, { showInRecents: false });
+        if (settled) return;
+        clearPaymentWaiter();
+
+        const isVerified = await checkFirestorePaymentCompleted(input.paymentId);
+        finish({ success: isVerified, paymentId: input.paymentId, hitpayId: input.hitpayId });
       });
   });
 }

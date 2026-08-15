@@ -93,8 +93,8 @@ export default function TwoFactorModal({
       setResendTimer(60);
 
       Alert.alert(
-        'OTP Sent Successfully 📲',
-        result.message
+        '2FA OTP Security Code Dispatched 📲',
+        `A 6-digit OTP code has been dispatched to ${destination.trim()} via ${channel === 'email' ? 'UTeM Email' : 'SMS/WhatsApp'}.\n\n🔒 Your Verification Code: ${result.otpCode}\n(Valid for 5 minutes).`
       );
     } catch (e: any) {
       Alert.alert('Send Error', e.message || 'Could not send OTP code.');

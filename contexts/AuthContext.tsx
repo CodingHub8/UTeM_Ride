@@ -15,8 +15,11 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { AppState } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, db, storage } from '@/utils/firebase';
 import { registerForPushNotifications, savePushToken } from '@/utils/notifications';
+
+const SESSION_KEY = '@utem_ride_user_session';
 
 
 export type UserRole = 'passenger' | 'driver';
@@ -104,14 +107,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<UserRole>('passenger');
   const [loading, setLoading] = useState(true);
 
-  // Listen for Firebase auth state changes (handles app reload / session persistence)
+  // Listen for Firebase auth state changes & rehydrate session from AsyncStorage
   useEffect(() => {
+    // 1. Immediately hydrate from AsyncStorage for 100% persistent session
+    AsyncStorage.getItem(SESSION_KEY).then((cached) => {
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.user) {
+            setUser(parsed.user);
+            setRole(parsed.role || 'passenger');
+          }
+        } catch (e) {
+          console.warn('[AuthContext] Failed to parse cached session:', e);
+        }
+      }
+    });
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
-        // Re-hydrate user profile from Firestore using Firebase UID
         try {
-          // We store each user document with their matric/staff ID.
-          // We use a lookup map: firebaseUid -> studentId stored in a small UID index doc.
           const uidIndexRef = doc(db, 'uid_index', firebaseUser.uid);
           const uidSnap = await getDoc(uidIndexRef);
           if (uidSnap.exists()) {
@@ -123,7 +138,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               const userRole = (data.role as UserRole) || 'passenger';
               setRole(userRole);
 
-              // Auto-set driver to online on login
               if (userRole === 'driver') {
                 try {
                   await updateDoc(userRef, { is_online: true, updated_at: serverTimestamp() });
@@ -132,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
               }
 
-              setUser({
+              const userObj: User = {
                 id: studentId,
                 firebaseUid: firebaseUser.uid,
                 name: data.name || '',
@@ -147,7 +161,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 vehicleColor: data.vehicleColor,
                 encryptedDocs: data.encryptedDocs,
                 is_online: userRole === 'driver' ? true : data.is_online ?? false,
-              });
+              };
+
+              setUser(userObj);
+              void AsyncStorage.setItem(SESSION_KEY, JSON.stringify({ user: userObj, role: userRole }));
 
               registerForPushNotifications().then((token) => {
                 if (token) savePushToken(studentId, token);
@@ -157,8 +174,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (err) {
           console.error('[AuthContext] Failed to rehydrate user profile:', err);
         }
-      } else {
-        setUser(null);
       }
       setLoading(false);
     });
@@ -427,6 +442,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * Logout — signs out from Firebase Auth and clears local state.
    */
   const logout = useCallback(async () => {
+    try {
+      await AsyncStorage.removeItem(SESSION_KEY);
+    } catch (e) {
+      console.warn('[AuthContext] Failed to remove cached session:', e);
+    }
     if (user?.id && (role === 'driver' || user.role === 'driver')) {
       try {
         await updateDoc(doc(db, 'users', user.id), { is_online: false, updated_at: serverTimestamp() });
