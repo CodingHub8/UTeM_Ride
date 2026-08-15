@@ -104,12 +104,22 @@ export async function waitForHitPayReturn(input: {
         if (settled) return;
         clearPaymentWaiter();
 
-        if (authResult.type === 'success') {
-          finish({ success: true, paymentId: input.paymentId, hitpayId: input.hitpayId });
-          return;
+        if (authResult.type === 'success' && authResult.url) {
+          const isFailedUrl = authResult.url.includes('payment-failed') || 
+                              authResult.url.includes('status=failed') || 
+                              authResult.url.includes('status=cancelled');
+          if (isFailedUrl) {
+            finish({ success: false, paymentId: input.paymentId, hitpayId: input.hitpayId });
+            return;
+          }
+          const isSuccessUrl = authResult.url.includes('payment-success') || authResult.url.includes('status=completed');
+          if (isSuccessUrl) {
+            finish({ success: true, paymentId: input.paymentId, hitpayId: input.hitpayId });
+            return;
+          }
         }
 
-        // Strict verification: check if Firestore was updated to 'completed'
+        // Strict verification fallback: check if Firestore document was updated to 'completed'
         const isVerified = await checkFirestorePaymentCompleted(input.paymentId);
         finish({ success: isVerified, paymentId: input.paymentId, hitpayId: input.hitpayId });
       })
