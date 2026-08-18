@@ -113,17 +113,13 @@ export default function LoginScreen() {
               style={styles.suggestionsScroll}
               contentContainerStyle={styles.suggestionsContainer}
             >
-              {['@siswa.utem.edu.my', 'siswa.utem.edu.my', '@student.utem.edu.my', 'student.utem.edu.my', '@utem.edu.my', 'utem.edu.my'].map((suggestion) => (
+              {['@siswa.utem.edu.my', '@student.utem.edu.my', '@utem.edu.my'].map((suggestion) => (
                 <TouchableOpacity
                   key={suggestion}
                   style={[styles.suggestionChip, { backgroundColor: isDark ? Colors.gray800 : Colors.gray100 }]}
                   onPress={() => {
-                    let localPart = email;
-                    if (email.includes('@')) {
-                      localPart = email.split('@')[0];
-                    }
-                    const cleanSuggestion = suggestion.startsWith('@') ? suggestion : `@${suggestion}`;
-                    setEmail(`${localPart}${cleanSuggestion}`);
+                    const localPart = email.split('@')[0].trim();
+                    setEmail(`${localPart}${suggestion}`);
                   }}
                 >
                   <Text style={[styles.suggestionText, { color: isDark ? Colors.primaryLight : Colors.primary }]}>

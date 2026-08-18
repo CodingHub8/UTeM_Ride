@@ -5,7 +5,7 @@ import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/
 import { useTheme } from '@/contexts/ThemeContext';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { processBankPayout } from '@/utils/payment';
 
@@ -128,12 +128,17 @@ export default function WalletScreen() {
     return unsubscribe;
   }, [user]);
 
-  // 2. Listen to connected bank account information in the user document
+  const [driverDocBalance, setDriverDocBalance] = useState<number | null>(null);
+
+  // 2. Listen to connected bank account information & driver_wallet_balance in the user document
   useEffect(() => {
     if (!user) return;
     const unsubscribe = onSnapshot(doc(db, 'users', user.id), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        if (data.driver_wallet_balance !== undefined) {
+          setDriverDocBalance(Number(data.driver_wallet_balance) || 0);
+        }
         if (data.bank_name && data.bank_account_number) {
           setConnectedBank({
             name: data.bank_name,
@@ -150,7 +155,8 @@ export default function WalletScreen() {
   }, [user]);
 
   // Calculate live e-wallet balance
-  const walletBalance = Math.max(0, transactions.reduce((acc, tx) => acc + tx.numericAmount, 0));
+  const computedTransactionsBalance = Math.max(0, transactions.reduce((acc, tx) => acc + tx.numericAmount, 0));
+  const walletBalance = driverDocBalance !== null ? driverDocBalance : computedTransactionsBalance;
 
   // Daily statistics derived dynamically
   const todayTripsCount = transactions.filter(t => t.type === 'trip' && t.time.includes(new Date().toLocaleDateString())).length;
@@ -239,6 +245,12 @@ export default function WalletScreen() {
           status: 'completed',
           created_at: serverTimestamp()
         });
+
+        if (user?.id) {
+          await updateDoc(doc(db, 'users', user.id), {
+            driver_wallet_balance: increment(-numericAmount)
+          });
+        }
 
         Alert.alert('Withdrawal Successful', `RM ${numericAmount.toFixed(2)} has been successfully transferred to your bank account.`);
         setWithdrawModalVisible(false);

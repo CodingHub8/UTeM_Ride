@@ -120,13 +120,16 @@ export default function TwoFactorModal({
       return;
     }
 
+    // Instant UI transition
+    setOtpSent(true);
+    setResendTimer(60);
     setLoading(true);
+
+    const cooldownEndTime = Date.now() + 60000;
+    AsyncStorage.setItem(COOLDOWN_KEY + userId, String(cooldownEndTime)).catch(() => {});
+
     try {
       await sendOtpCode(userId, channel, destination);
-      const cooldownEndTime = Date.now() + 60000;
-      await AsyncStorage.setItem(COOLDOWN_KEY + userId, String(cooldownEndTime));
-      setOtpSent(true);
-      setResendTimer(60);
 
       if (channel === 'email') {
         Alert.alert(
@@ -139,8 +142,8 @@ export default function TwoFactorModal({
           `A 6-digit verification code has been sent via SMS to ${destination.trim()}.\n\nPlease enter the code below.`
         );
       }
-    } catch (e: any) {
-      Alert.alert('Send Error', e.message || 'Could not send verification request.');
+    } catch (err: any) {
+      Alert.alert('Send Failed', err.message || 'Failed to dispatch 2FA code. Please try again.');
     } finally {
       setLoading(false);
     }

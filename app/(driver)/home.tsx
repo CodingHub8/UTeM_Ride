@@ -390,7 +390,7 @@ export default function DriverHomeScreen() {
         <View style={{ marginTop: Spacing.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.xs }}>
             <Text style={[styles.statLabel, dynamicStyles.statLabel, { fontWeight: FontWeight.bold }]}>Recent Ride History</Text>
-            <TouchableOpacity onPress={() => router.push('/(driver)/wallet')}>
+            <TouchableOpacity onPress={() => router.push('/(driver)/history' as any)}>
               <Text style={{ fontSize: FontSize.xs, color: Colors.primary, fontWeight: FontWeight.semibold }}>View All</Text>
             </TouchableOpacity>
           </View>

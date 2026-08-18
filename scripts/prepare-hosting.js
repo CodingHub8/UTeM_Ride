@@ -91,7 +91,9 @@ try {
 
   if (fs.existsSync(apkSrc)) {
     fs.mkdirSync(apkDstDir, { recursive: true });
-    console.log('Copying android APK (175MB)... This might take a few seconds.');
+    const apkSizeBytes = fs.statSync(apkSrc).size;
+    const apkSizeMb = (apkSizeBytes / (1024 * 1024)).toFixed(1);
+    console.log(`Copying android APK (${apkSizeMb}MB)... This might take a few seconds.`);
     fs.copyFileSync(apkSrc, apkDst);
     console.log('✓ Copied android APK to hosting bundle.');
   } else {

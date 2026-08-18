@@ -218,6 +218,7 @@ export async function cancelAndRefundRide(
     // Directly increment passenger's wallet_balance document in Firestore
     const userRef = doc(db, 'users', actualPassengerId);
     batch.update(userRef, {
+      passenger_wallet_balance: increment(actualFare),
       wallet_balance: increment(actualFare),
       updated_at: serverTimestamp(),
     });
@@ -271,6 +272,7 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
     // Deduct 10% platform fee from driver's e-wallet balance
     const driverRef = doc(db, 'users', input.driver_id);
     await updateDoc(driverRef, {
+      driver_wallet_balance: increment(-commission),
       wallet_balance: increment(-commission),
       updated_at: serverTimestamp(),
     });
@@ -311,6 +313,7 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
     // Credit net earnings (90% of fare) directly to driver's e-wallet balance
     const driverRef = doc(db, 'users', input.driver_id);
     await updateDoc(driverRef, {
+      driver_wallet_balance: increment(netEarnings),
       wallet_balance: increment(netEarnings),
       updated_at: serverTimestamp(),
     });

@@ -5,7 +5,7 @@ import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/
 import { useTheme } from '@/contexts/ThemeContext';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { processBankPayout } from '@/utils/payment';
 import { processHitPayCheckout, parseAmount } from '@/utils/paymentStore';
@@ -129,7 +129,9 @@ export default function PassengerWalletScreen() {
     const unsubscribe = onSnapshot(doc(db, 'users', user.id), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        if (data.wallet_balance !== undefined) {
+        if (data.passenger_wallet_balance !== undefined) {
+          setUserDocBalance(Number(data.passenger_wallet_balance) || 0);
+        } else if (data.wallet_balance !== undefined) {
           setUserDocBalance(Number(data.wallet_balance) || 0);
         }
         if (data.bank_name && data.bank_account_number) {
@@ -240,8 +242,8 @@ export default function PassengerWalletScreen() {
 
   const handleConfirmTopup = async () => {
     const numericAmount = parseFloat(topupAmountInput);
-    if (isNaN(numericAmount) || numericAmount < 1) {
-      Alert.alert('Invalid Amount', 'The minimum top-up limit is RM 1.00.');
+    if (isNaN(numericAmount) || numericAmount < 2) {
+      Alert.alert('Minimum Limit', 'Minimum online top-up amount is RM 2.00 (enforced by FPX / HitPay gateway).');
       return;
     }
     if (!user) return;
@@ -271,6 +273,11 @@ export default function PassengerWalletScreen() {
           role: 'passenger',
           status: 'completed',
           created_at: serverTimestamp()
+        });
+
+        await updateDoc(doc(db, 'users', user.id), {
+          passenger_wallet_balance: increment(numericAmount),
+          wallet_balance: increment(numericAmount)
         });
 
         Alert.alert('Top Up Successful', `RM ${numericAmount.toFixed(2)} has been added to your wallet balance.`);

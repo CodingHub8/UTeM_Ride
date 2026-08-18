@@ -10,22 +10,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getCurrentLocationAddress, getDirections, getNearbyPlaces, getPlaceAutocomplete, getPlaceDetails, getRecentDestinations, getRecentPickups } from '@/utils/location';
 
 const BASE_FARES = {
-  standard: 1.00,
-  premium: 3.00,
-  motorcycle: 1.00,
-  carpool: 0.90
+  standard: { base: 4.00, rateKm: 0.90, minFloor: 5.00 },
+  premium: { base: 6.00, rateKm: 1.30, minFloor: 7.50 },
+  motorcycle: { base: 2.80, rateKm: 0.70, minFloor: 3.50 },
+  carpool: { base: 2.50, rateKm: 0.50, minFloor: 3.00 }
 };
-
-const RATE_PER_KM = 0.50; 
 
 const DEFAULT_PICKUP_COORDS = { latitude: 2.3135, longitude: 102.3211 };
 const DEFAULT_PICKUP_ADDRESS = 'UTeM Kampus Induk, Durian Tunggal';
 
 const RIDE_TYPES = [
-  { id: 'standard', name: 'Standard', icon: '🚗', basePrice: BASE_FARES.standard, seats: '3-4' },
-  { id: 'premium', name: 'Premium', icon: '✨', basePrice: BASE_FARES.premium, seats: '5-6' },
-  { id: 'motorcycle', name: 'Motorcycle', icon: '🏍️', basePrice: BASE_FARES.motorcycle, seats: '1' },
-  { id: 'carpool', name: 'Car Pool', icon: '👥', basePrice: BASE_FARES.carpool, seats: '3-6' },
+  { id: 'standard', name: 'Standard', icon: '🚗', basePrice: BASE_FARES.standard.base, rateKm: BASE_FARES.standard.rateKm, minFloor: BASE_FARES.standard.minFloor, seats: '3-4' },
+  { id: 'premium', name: 'Premium', icon: '✨', basePrice: BASE_FARES.premium.base, rateKm: BASE_FARES.premium.rateKm, minFloor: BASE_FARES.premium.minFloor, seats: '5-6' },
+  { id: 'motorcycle', name: 'Motorcycle', icon: '🏍️', basePrice: BASE_FARES.motorcycle.base, rateKm: BASE_FARES.motorcycle.rateKm, minFloor: BASE_FARES.motorcycle.minFloor, seats: '1' },
+  { id: 'carpool', name: 'Car Pool', icon: '👥', basePrice: BASE_FARES.carpool.base, rateKm: BASE_FARES.carpool.rateKm, minFloor: BASE_FARES.carpool.minFloor, seats: '3-6' },
 ];
 
 export default function SetDestinationScreen() {
@@ -182,11 +180,13 @@ export default function SetDestinationScreen() {
     }
   }, [selectedPlace, pickupAddress, pickupCoords, destLat, destLng, initialDestination, selectedCoords]);
 
-  const calculateFare = (basePrice: number) => {
+  const calculateFare = (rideItem: any) => {
     if (!routeData) return 'RM --';
-    const distanceKm = routeData.distanceValue / 1000;
-    const total = basePrice + (distanceKm * RATE_PER_KM);
-    return `RM ${total.toFixed(2)}`;
+    const ride = typeof rideItem === 'string' ? (RIDE_TYPES.find(r => r.id === rideItem) || RIDE_TYPES[0]) : (rideItem || RIDE_TYPES[0]);
+    const distanceKm = (routeData.distanceValue || 0) / 1000;
+    const rawTotal = (ride.basePrice || 4.00) + (distanceKm * (ride.rateKm || 0.90));
+    const finalFare = Math.max(rawTotal, ride.minFloor || 3.00);
+    return `RM ${finalFare.toFixed(2)}`;
   };
 
   // Sync state with navigation params
@@ -457,7 +457,7 @@ export default function SetDestinationScreen() {
                   </Text>
                 </View>
                 <Text style={[styles.ridePrice, { color: isDark ? Colors.white : Colors.gray700 }, selectedRide === r.id && { color: isDark ? Colors.primaryLight : Colors.primary }]}>
-                  {isSearching ? 'RM --' : calculateFare(r.basePrice)}
+                  {isSearching ? 'RM --' : calculateFare(r)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -495,7 +495,7 @@ export default function SetDestinationScreen() {
               <View style={styles.fareRow}>
                 <Text style={[styles.fareLabel, dynamicStyles.subText]}>Estimated fare</Text>
                 <Text style={[styles.fareVal, { color: isDark ? Colors.primaryLight : Colors.primary }]}>
-                  {calculateFare(RIDE_TYPES.find(r => r.id === selectedRide)?.basePrice || 0)}
+                  {calculateFare(selectedRide)}
                 </Text>
               </View>
               <View style={styles.fareRow}>
@@ -513,7 +513,7 @@ export default function SetDestinationScreen() {
               disabled={isSearching || !routeData}
               onPress={() => {
                 const ride = RIDE_TYPES.find(r => r.id === selectedRide);
-                const fare = calculateFare(ride?.basePrice || 0);
+                const fare = calculateFare(ride);
 
                 router.push({
                   pathname: '/(passenger)/ride-request',
