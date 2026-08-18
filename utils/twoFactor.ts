@@ -54,24 +54,23 @@ export async function sendOtpCode(
 
   const nowUtc = new Date().toUTCString();
 
-  // 2. Dispatch via Native Firebase Auth Email Link
+  // 2. Dispatch via Native Firebase Auth Email Link (Link only, no 6-digit code needed)
   if (channel === 'email') {
     const actionCodeSettings = {
-      url: `https://project-utem-ride.web.app/email-verify.html?userId=${userId}&otp=${otpCode}`,
+      url: `https://project-utem-ride.web.app/email-verify.html?userId=${userId}`,
       handleCodeInApp: true,
     };
     try {
-      console.log(`[UTeM Ride Email] Dispatching 2FA email link to ${cleanDestination} (OTP: ${otpCode})`);
+      console.log(`[UTeM Ride Email] Dispatching 2FA email link to ${cleanDestination}`);
       await sendSignInLinkToEmail(auth, cleanDestination, actionCodeSettings);
     } catch (err: any) {
       console.warn('[UTeM Ride Email Dispatch Warning]:', err?.message || err);
-      // Fallback: Code is already stored safely in Firestore for 6-digit OTP entry in modal
     }
   }
 
-  // 3. Dispatch via Native Firebase Phone Auth (SMS)
+  // 3. Dispatch via Native Firebase Phone Auth (SMS OTP)
   if (channel === 'sms') {
-    console.log(`[UTeM Ride Phone Auth SMS] Dispatched 6-digit OTP ${otpCode} to ${cleanDestination}`);
+    console.log(`[UTeM Ride Phone Auth SMS] Dispatched 6-digit OTP to ${cleanDestination}`);
     
     try {
       const apiKey = process.env.EXPO_PUBLIC_FIREBASE_API_KEY;
@@ -87,14 +86,12 @@ export async function sendOtpCode(
     }
   }
 
-  const emailTextCustom = `A 2FA verification email has been sent to ${cleanDestination} at ${nowUtc}.\nYour 6-digit code is: ${otpCode} (or tap the link in your email).`;
-
   return {
     success: true,
     otpCode,
     message: channel === 'email' 
-      ? emailTextCustom 
-      : `A 6-digit 2FA verification code (${otpCode}) has been sent to ${cleanDestination} via SMS.`,
+      ? `A verification link has been sent to ${cleanDestination}. Please check your inbox and tap the link to verify your account.`
+      : `A 6-digit 2FA verification code has been sent to ${cleanDestination} via SMS.`,
   };
 }
 
