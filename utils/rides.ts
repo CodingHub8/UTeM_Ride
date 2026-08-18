@@ -1,5 +1,5 @@
 import {
-    collection,
+  collection,
   doc,
   addDoc,
   updateDoc,
@@ -9,6 +9,7 @@ import {
   where,
   getDocs,
   writeBatch,
+  increment,
 } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { stripUndefined } from '@/utils/firestoreHelpers';
@@ -194,6 +195,13 @@ export async function cancelAndRefundRide(
       created_at: serverTimestamp(),
     });
 
+    // Directly increment passenger's wallet_balance document in Firestore
+    const userRef = doc(db, 'users', passengerId);
+    batch.update(userRef, {
+      wallet_balance: increment(fareAmount),
+      updated_at: serverTimestamp(),
+    });
+
     await batch.commit();
   }
 }
@@ -225,6 +233,7 @@ export interface CreateRideTransactionsInput {
 export async function createRideTransactions(input: CreateRideTransactionsInput) {
   const commission = +(input.fare * COMMISSION_RATE).toFixed(2);
   const grossAmount = input.fare;
+  const netEarnings = +(grossAmount - commission).toFixed(2);
 
   const passengerDetails = {
     name: input.passenger_name || 'Passenger',
@@ -235,39 +244,60 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
   };
   const route = { pickup: input.pickup, destination: input.destination };
 
-  // 1. Create Driver Gross Fare Transaction
-  await addDoc(collection(db, 'transactions'), stripUndefined({
-    user_id: input.driver_id,
-    ride_id: input.rideId,
-    amount: input.payment_method === 'cash' ? 0 : grossAmount,
-    cash_amount: grossAmount,
-    payment_method: input.payment_method,
-    transaction_type: 'fare_payment',
-    label: input.payment_method === 'cash' ? 'Trip payment from passenger (Cash)' : 'Trip payment from passenger',
-    role: 'driver',
-    status: 'completed',
-    route,
-    passenger: passengerDetails,
-    created_at: serverTimestamp(),
-  }));
+  const isCash = input.payment_method === 'cash';
 
-  // 2. Create Driver Commission service fee Transaction
-  await addDoc(collection(db, 'transactions'), stripUndefined({
-    user_id: input.driver_id,
-    ride_id: input.rideId,
-    amount: input.payment_method === 'cash' ? 0 : -commission,
-    cash_amount: commission,
-    payment_method: input.payment_method,
-    transaction_type: 'service_fee',
-    label: input.payment_method === 'cash' ? 'System commission fee (Cash - 0%)' : 'System commission fee (10%)',
-    role: 'driver',
-    status: 'completed',
-    created_at: serverTimestamp(),
-  }));
+  if (isCash) {
+    // 1. CASH RIDE: Passenger paid cash directly to driver.
+    // Deduct 10% platform fee from driver's e-wallet balance
+    const driverRef = doc(db, 'users', input.driver_id);
+    await updateDoc(driverRef, {
+      wallet_balance: increment(-commission),
+      updated_at: serverTimestamp(),
+    });
+
+    // Record a single service_fee transaction for driver: - RM X.XX
+    await addDoc(collection(db, 'transactions'), stripUndefined({
+      user_id: input.driver_id,
+      ride_id: input.rideId,
+      amount: -commission,
+      cash_amount: grossAmount,
+      payment_method: 'cash',
+      transaction_type: 'service_fee',
+      label: 'Cash Ride Platform Fee (10%)',
+      role: 'driver',
+      status: 'completed',
+      route,
+      passenger: passengerDetails,
+      created_at: serverTimestamp(),
+    }));
+  } else {
+    // 2. ONLINE PAYMENT RIDE (E-Wallet / HitPay): Passenger paid online in-app.
+    // Credit net earnings (90% of fare) directly to driver's e-wallet balance
+    const driverRef = doc(db, 'users', input.driver_id);
+    await updateDoc(driverRef, {
+      wallet_balance: increment(netEarnings),
+      updated_at: serverTimestamp(),
+    });
+
+    // Record single positive earnings transaction for driver: + RM X.XX
+    await addDoc(collection(db, 'transactions'), stripUndefined({
+      user_id: input.driver_id,
+      ride_id: input.rideId,
+      amount: netEarnings,
+      cash_amount: grossAmount,
+      payment_method: input.payment_method,
+      transaction_type: 'fare_payment',
+      label: 'Ride Earnings (Online Payment)',
+      role: 'driver',
+      status: 'completed',
+      route,
+      passenger: passengerDetails,
+      created_at: serverTimestamp(),
+    }));
+  }
 
   // 3. Passenger transaction: release held transaction if it exists
-  let passengerPaidUpdated = false;
-  if (input.payment_method !== 'cash') {
+  if (!isCash) {
     try {
       const q = query(
         collection(db, 'transactions'),
@@ -281,32 +311,14 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
         snap.forEach((d) => {
           batch.update(d.ref, {
             status: 'completed',
-            label: `Ride fare paid (Escrow Released)`,
+            label: `Ride fare paid`,
             role: 'passenger',
           });
         });
         await batch.commit();
-        passengerPaidUpdated = true;
       }
     } catch (err) {
-      console.warn('Error releasing held transaction, fallback to new entry:', err);
+      console.warn('Error releasing held passenger escrow transaction:', err);
     }
-  }
-
-  // 4. Create new passenger completed transaction if fallback or cash
-  if (!passengerPaidUpdated) {
-    await addDoc(collection(db, 'transactions'), stripUndefined({
-      user_id: input.passenger_id,
-      ride_id: input.rideId,
-      amount: input.payment_method === 'cash' ? 0 : -grossAmount,
-      cash_amount: grossAmount,
-      payment_method: input.payment_method,
-      transaction_type: 'fare_payment',
-      label: input.payment_method === 'cash' ? 'Ride fare paid (Cash)' : 'Ride fare paid',
-      role: 'passenger',
-      status: 'completed',
-      route,
-      created_at: serverTimestamp(),
-    }));
   }
 }

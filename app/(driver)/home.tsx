@@ -84,11 +84,7 @@ export default function DriverHomeScreen() {
     return unsubscribeFocus;
   }, [user?.id, navigation]);
 
-  useEffect(() => {
-    if (user && !user.is_2FA_verified) {
-      setShow2FA(true);
-    }
-  }, [user?.id, user?.is_2FA_verified]);
+  const [recentRides, setRecentRides] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -100,15 +96,20 @@ export default function DriverHomeScreen() {
     const q = query(collection(db, 'rides'), where('driver_id', '==', user.id));
     const unsub = onSnapshot(q, (snap) => {
       const active: any[] = [];
+      const completed: any[] = [];
       snap.forEach((d) => {
         const data = d.data();
         if (['accepted', 'arrived', 'in_progress'].includes(data.status)) {
           active.push({ id: d.id, ...data });
+        } else if (data.status === 'completed' || data.status === 'cancelled') {
+          completed.push({ id: d.id, ...data });
         }
       });
       active.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      completed.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
       setActiveRide(active[0] || null);
-    }, (err) => console.warn('Driver active ride listener error:', err));
+      setRecentRides(completed.slice(0, 5));
+    }, (err) => console.warn('Driver active/history ride listener error:', err));
     return unsub;
   }, [user?.id]);
 
@@ -384,6 +385,37 @@ export default function DriverHomeScreen() {
             <Text style={[styles.offlineText, dynamicStyles.offlineText]}>Go online to start receiving ride requests</Text>
           </View>
         )}
+
+        {/* Recent Ride History Section */}
+        <View style={{ marginTop: Spacing.md }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.xs }}>
+            <Text style={[styles.statLabel, dynamicStyles.statLabel, { fontWeight: FontWeight.bold }]}>Recent Ride History</Text>
+            <TouchableOpacity onPress={() => router.push('/(driver)/wallet')}>
+              <Text style={{ fontSize: FontSize.xs, color: Colors.primary, fontWeight: FontWeight.semibold }}>View All</Text>
+            </TouchableOpacity>
+          </View>
+
+          {recentRides.length === 0 ? (
+            <View style={[styles.requestCard, { paddingVertical: Spacing.sm }]}>
+              <Ionicons name="time-outline" size={20} color={Colors.gray400} />
+              <Text style={[styles.requestSub, dynamicStyles.requestSub, { flex: 1 }]}>No completed rides yet</Text>
+            </View>
+          ) : (
+            recentRides.map((ride) => (
+              <View key={ride.id} style={[styles.requestCard, { marginBottom: Spacing.xs, paddingVertical: Spacing.xs }]}>
+                <Ionicons name={ride.status === 'completed' ? 'checkmark-circle' : 'close-circle'} size={22} color={ride.status === 'completed' ? Colors.success : Colors.error} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.requestTitle, dynamicStyles.requestTitle, { fontSize: FontSize.xs }]} numberOfLines={1}>
+                    {ride.pickup_address} → {ride.destination_address}
+                  </Text>
+                  <Text style={[styles.requestSub, dynamicStyles.requestSub, { fontSize: 10 }]}>
+                    {ride.status === 'completed' ? `Completed • RM ${ride.fare}` : 'Cancelled'} • {ride.payment_method === 'cash' ? 'Cash' : 'Online'}
+                  </Text>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
       </View>
 
       {user && (
