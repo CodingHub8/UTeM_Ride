@@ -27,13 +27,16 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
+  addDoc,
   onSnapshot,
   query,
   serverTimestamp,
   updateDoc,
   setDoc,
   where,
-  addDoc,
+  writeBatch,
+  increment,
 } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { getCurrentLocationAddress, getPlaceAutocomplete, getPlaceDetails } from '@/utils/location';
@@ -405,6 +408,45 @@ export default function CarpoolSlotsScreen() {
                 status: 'cancelled',
                 cancelled_at: serverTimestamp(),
               });
+
+              if (user?.id) {
+                const q = query(
+                  collection(db, 'transactions'),
+                  where('ride_id', '==', reqId),
+                  where('user_id', '==', user.id),
+                  where('status', '==', 'held')
+                );
+                const snap = await getDocs(q);
+                if (!snap.empty) {
+                  let refundTotal = 0;
+                  const batch = writeBatch(db);
+                  snap.forEach((d) => {
+                    batch.update(d.ref, { status: 'refunded' });
+                    refundTotal += Math.abs(d.data().amount || 0);
+                  });
+                  if (refundTotal > 0) {
+                    const refundRef = doc(collection(db, 'transactions'));
+                    batch.set(refundRef, {
+                      user_id: user.id,
+                      ride_id: reqId,
+                      amount: refundTotal,
+                      payment_method: 'wallet',
+                      transaction_type: 'refund',
+                      label: 'Refund: Carpool request cancelled',
+                      role: 'passenger',
+                      status: 'completed',
+                      created_at: serverTimestamp(),
+                    });
+                    const userRef = doc(db, 'users', user.id);
+                    batch.update(userRef, {
+                      wallet_balance: increment(refundTotal),
+                      updated_at: serverTimestamp(),
+                    });
+                    await batch.commit();
+                  }
+                }
+              }
+
               Alert.alert('Cancelled', 'Your carpool request has been cancelled.');
             } catch (e: any) {
               Alert.alert('Error', e.message || 'Failed to cancel carpool request.');

@@ -68,7 +68,11 @@ export default function WalletScreen() {
 
   const onRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
+    try {
+      // Trigger soft refresh
+    } finally {
+      setTimeout(() => setRefreshing(false), 1000);
+    }
   };
 
   // 1. Listen to real-time transactions from Firestore
@@ -101,7 +105,9 @@ export default function WalletScreen() {
         
         let label = data.label || 'Transaction';
         if (data.transaction_type === 'service_fee') {
-          label = `Cash Ride Platform Fee (10%)`;
+          label = `Cash fee (-10%)`;
+        } else if (data.transaction_type === 'cash_payment') {
+          label = `Cash payment`;
         }
 
         txs.push({
@@ -109,7 +115,7 @@ export default function WalletScreen() {
           type: isOutgoing ? 'withdrawal' : 'trip',
           label,
           amount: displayAmt,
-          numericAmount: data.amount || 0,
+          numericAmount: data.transaction_type === 'cash_payment' ? 0 : (data.amount || 0),
           time: data.created_at ? new Date(data.created_at.seconds * 1000).toLocaleString() : 'Just now',
           route: data.route,
           passenger: data.passenger,

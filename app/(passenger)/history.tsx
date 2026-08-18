@@ -32,7 +32,16 @@ export default function HistoryScreen() {
 
   const onRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
+    try {
+      if (user?.id) {
+        setLoading(true);
+      }
+    } finally {
+      setTimeout(() => {
+        setRefreshing(false);
+        setLoading(false);
+      }, 1000);
+    }
   };
 
   useEffect(() => {
@@ -148,23 +157,24 @@ export default function HistoryScreen() {
         <Text style={styles.headerSub}>{loading ? 'Loading...' : `${rides.length} rides`}</Text>
       </View>
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
-      ) : (
-        <FlatList
-          data={rides}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} tintColor={Colors.primary} />}
-          ListEmptyComponent={
+      <FlatList
+        data={rides}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} tintColor={Colors.primary} />}
+        ListEmptyComponent={
+          loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+            </View>
+          ) : (
             <View style={styles.emptyContainer}>
               <Ionicons name="car-outline" size={64} color={isDark ? Colors.gray700 : Colors.gray300} />
               <Text style={[styles.emptyText, dynamicStyles.text]}>You haven't booked any rides.</Text>
               <Text style={[styles.emptySub, dynamicStyles.subText]}>Rides you request and complete will appear here.</Text>
             </View>
-          }
+          )
+        }
           renderItem={({ item }) => {
             const statusConfig = getStatusStyle(item.status);
             return (
@@ -205,7 +215,6 @@ export default function HistoryScreen() {
             );
           }}
         />
-      )}
 
       {/* Inspection Modal Detail Overlay */}
       <Modal

@@ -12,9 +12,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { doc, onSnapshot } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '@/utils/firebase';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from '@/constants/theme';
 import { sendOtpCode, verifyOtpCode, OtpChannel } from '@/utils/twoFactor';
+
+const COOLDOWN_KEY = '@utem_ride_2fa_cooldown_';
 
 interface TwoFactorModalProps {
   visible: boolean;
@@ -62,21 +65,36 @@ export default function TwoFactorModal({
     let interval: ReturnType<typeof setInterval>;
     if (resendTimer > 0) {
       interval = setInterval(() => {
-        setResendTimer((prev) => prev - 1);
+        setResendTimer((prev) => (prev <= 1 ? 0 : prev - 1));
       }, 1000);
     }
     return () => clearInterval(interval);
   }, [resendTimer]);
 
   useEffect(() => {
-    if (visible) {
-      setEmailInput(email);
-      setPhoneInput(phoneNumber);
-      setCode('');
-      setOtpSent(false);
-      setResendTimer(0);
-    }
-  }, [visible, email, phoneNumber]);
+    if (!visible || !userId) return;
+    setEmailInput(email);
+    setPhoneInput(phoneNumber);
+    setCode('');
+
+    const checkPersistedCooldown = async () => {
+      try {
+        const storedEndTime = await AsyncStorage.getItem(COOLDOWN_KEY + userId);
+        if (storedEndTime) {
+          const endTime = parseInt(storedEndTime, 10);
+          const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+          if (remaining > 0) {
+            setResendTimer(remaining);
+            setOtpSent(true);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to check 2FA cooldown:', e);
+      }
+    };
+    checkPersistedCooldown();
+  }, [visible, email, phoneNumber, userId]);
 
   // Real-time listener: Auto-close modal as soon as 2FA status becomes verified
   useEffect(() => {
@@ -105,6 +123,8 @@ export default function TwoFactorModal({
     setLoading(true);
     try {
       await sendOtpCode(userId, channel, destination);
+      const cooldownEndTime = Date.now() + 60000;
+      await AsyncStorage.setItem(COOLDOWN_KEY + userId, String(cooldownEndTime));
       setOtpSent(true);
       setResendTimer(60);
 

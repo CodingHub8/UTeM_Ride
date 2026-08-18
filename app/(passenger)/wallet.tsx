@@ -58,7 +58,11 @@ export default function PassengerWalletScreen() {
 
   const onRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
+    try {
+      setLoading(true);
+    } finally {
+      setTimeout(() => setRefreshing(false), 1000);
+    }
   };
   const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [topupLoading, setTopupLoading] = useState(false);

@@ -163,42 +163,62 @@ export async function cancelAndRefundRide(
   paymentLabel?: string
 ) {
   const ref = doc(db, 'rides', rideId);
+  const snapRide = await getDoc(ref);
+
+  let actualPassengerId = passengerId;
+  let actualFare = fareAmount;
+  let actualPaymentMethod = paymentMethod;
+  let actualPaymentLabel = paymentLabel || '';
+
+  if (snapRide.exists()) {
+    const data = snapRide.data();
+    if (data.passenger_id) actualPassengerId = data.passenger_id;
+    if (data.fare) {
+      const parsed = parseFare(data.fare);
+      if (parsed > 0) actualFare = parsed;
+    }
+    if (data.payment_method) actualPaymentMethod = data.payment_method;
+    if (data.payment_label) actualPaymentLabel = data.payment_label;
+  }
+
   await updateDoc(ref, {
     status: 'cancelled' as RideStatus,
     cancelled_at: serverTimestamp(),
   });
 
-  if (paymentMethod !== 'cash' && fareAmount > 0) {
+  if (actualPaymentMethod !== 'cash' && actualFare > 0 && actualPassengerId && actualPassengerId !== 'anonymous') {
     const q = query(
       collection(db, 'transactions'),
       where('ride_id', '==', rideId),
-      where('user_id', '==', passengerId),
+      where('user_id', '==', actualPassengerId),
       where('status', '==', 'held')
     );
     const snap = await getDocs(q);
     const batch = writeBatch(db);
 
-    snap.forEach((d) => {
-      batch.update(d.ref, { status: 'refunded' });
-    });
+    if (!snap.empty) {
+      snap.forEach((d) => {
+        batch.update(d.ref, { status: 'refunded' });
+      });
+    }
 
     const refundRef = doc(collection(db, 'transactions'));
     batch.set(refundRef, {
-      user_id: passengerId,
+      user_id: actualPassengerId,
       ride_id: rideId,
-      amount: fareAmount, // positive refund credit
-      payment_method: paymentMethod,
+      amount: actualFare, // positive refund credit
+      payment_method: actualPaymentMethod,
       transaction_type: 'refund',
-      label: `Refund: Ride cancelled/expired (${paymentLabel || paymentMethod})`,
+      label: `Refund: Ride cancelled/expired (${actualPaymentLabel || actualPaymentMethod})`,
       role: 'passenger',
       status: 'completed',
       created_at: serverTimestamp(),
     });
 
     // Directly increment passenger's wallet_balance document in Firestore
-    const userRef = doc(db, 'users', passengerId);
+    const userRef = doc(db, 'users', actualPassengerId);
     batch.update(userRef, {
-      wallet_balance: increment(fareAmount),
+      wallet_balance: increment(actualFare),
       updated_at: serverTimestamp(),
     });
 
@@ -247,7 +267,7 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
   const isCash = input.payment_method === 'cash';
 
   if (isCash) {
-    // 1. CASH RIDE: Passenger paid cash directly to driver.
+    // 1. CASH RIDE: Driver receives gross cash in hand.
     // Deduct 10% platform fee from driver's e-wallet balance
     const driverRef = doc(db, 'users', input.driver_id);
     await updateDoc(driverRef, {
@@ -255,7 +275,23 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
       updated_at: serverTimestamp(),
     });
 
-    // Record a single service_fee transaction for driver: - RM X.XX
+    // Transaction 1 for driver: Cash Payment (+ RM X.XX info record)
+    await addDoc(collection(db, 'transactions'), stripUndefined({
+      user_id: input.driver_id,
+      ride_id: input.rideId,
+      amount: grossAmount,
+      cash_amount: grossAmount,
+      payment_method: 'cash',
+      transaction_type: 'cash_payment',
+      label: 'Cash payment',
+      role: 'driver_cash_info',
+      status: 'completed',
+      route,
+      passenger: passengerDetails,
+      created_at: serverTimestamp(),
+    }));
+
+    // Transaction 2 for driver: Cash fee (-10%) (- RM Y.YY)
     await addDoc(collection(db, 'transactions'), stripUndefined({
       user_id: input.driver_id,
       ride_id: input.rideId,
@@ -263,7 +299,7 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
       cash_amount: grossAmount,
       payment_method: 'cash',
       transaction_type: 'service_fee',
-      label: 'Cash Ride Platform Fee (10%)',
+      label: 'Cash fee (-10%)',
       role: 'driver',
       status: 'completed',
       route,
@@ -271,7 +307,7 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
       created_at: serverTimestamp(),
     }));
   } else {
-    // 2. ONLINE PAYMENT RIDE (E-Wallet / HitPay): Passenger paid online in-app.
+    // 2. ONLINE PAYMENT RIDE (FPX / Card / E-Wallet):
     // Credit net earnings (90% of fare) directly to driver's e-wallet balance
     const driverRef = doc(db, 'users', input.driver_id);
     await updateDoc(driverRef, {
@@ -279,7 +315,17 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
       updated_at: serverTimestamp(),
     });
 
-    // Record single positive earnings transaction for driver: + RM X.XX
+    const methodLower = (input.payment_method || '').toLowerCase();
+    let onlineLabel = 'Online payment';
+    if (methodLower.includes('fpx')) {
+      onlineLabel = 'FPX (Online payment)';
+    } else if (methodLower.includes('card')) {
+      onlineLabel = 'Card payment';
+    } else {
+      onlineLabel = 'E-Wallet (Online payment)';
+    }
+
+    // Record single net earnings transaction for driver: + RM netEarnings
     await addDoc(collection(db, 'transactions'), stripUndefined({
       user_id: input.driver_id,
       ride_id: input.rideId,
@@ -287,7 +333,7 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
       cash_amount: grossAmount,
       payment_method: input.payment_method,
       transaction_type: 'fare_payment',
-      label: 'Ride Earnings (Online Payment)',
+      label: onlineLabel,
       role: 'driver',
       status: 'completed',
       route,
