@@ -151,7 +151,7 @@ export default function PassengerProfileScreen() {
         <Text style={styles.switchText}>Switch to Driver Mode</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
+      <TouchableOpacity style={styles.logoutBtn} onPress={() => { logout(); router.replace('/(auth)/login'); }}>
         <Ionicons name="log-out-outline" size={20} color={Colors.error} />
         <Text style={styles.logoutText}>Log Out</Text>
       </TouchableOpacity>

@@ -111,12 +111,17 @@ export default function PassengerWalletScreen() {
     return unsubscribe;
   }, [user]);
 
-  // Real-time listener for passenger's bank account connection info
+  const [userDocBalance, setUserDocBalance] = useState<number | null>(null);
+
+  // Real-time listener for passenger's bank account connection info & wallet balance
   useEffect(() => {
     if (!user) return;
     const unsubscribe = onSnapshot(doc(db, 'users', user.id), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        if (data.wallet_balance !== undefined) {
+          setUserDocBalance(Number(data.wallet_balance) || 0);
+        }
         if (data.bank_name && data.bank_account_number) {
           setConnectedBank({
             name: data.bank_name,
@@ -132,8 +137,8 @@ export default function PassengerWalletScreen() {
     return unsubscribe;
   }, [user]);
 
-  // Calculate passenger's wallet balance
-  const walletBalance = Math.max(0, transactions.reduce((acc, tx) => acc + tx.numericAmount, 0));
+  // Calculate passenger's wallet balance (prefers real-time userDocBalance)
+  const walletBalance = userDocBalance !== null ? userDocBalance : Math.max(0, transactions.reduce((acc, tx) => acc + tx.numericAmount, 0));
 
   const handleSaveBank = async () => {
     if (!bankNameInput || !bankAccountInput) {

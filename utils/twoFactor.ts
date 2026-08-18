@@ -38,21 +38,22 @@ export async function sendOtpCode(
     updated_at: serverTimestamp(),
   });
 
-  const channelLabel = channel === 'email' ? 'UTeM Email' : 'Phone SMS';
   const nowUtc = new Date().toUTCString();
 
   // 2. Dispatch via 100% Native Firebase Auth Email Link
   if (channel === 'email') {
+    const actionCodeSettings = {
+      url: `https://project-utem-ride.web.app/email-verify.html?userId=${userId}`,
+      handleCodeInApp: true,
+    };
     try {
-      console.log(`[UTeM Ride Email] Dispatching 2FA email link for ${cleanDestination} at ${nowUtc}`);
-      const actionCodeSettings = {
-        url: `https://project-utem-ride.web.app/email-verify.html?userId=${userId}`,
-        handleCodeInApp: true,
-      };
+      console.log(`[UTeM Ride Email] Dispatching 2FA email link to ${cleanDestination}`);
       await sendSignInLinkToEmail(auth, cleanDestination, actionCodeSettings);
-      console.log('[UTeM Ride Email] Successfully sent native Google email to:', cleanDestination);
     } catch (err: any) {
-      console.warn('[UTeM Ride Email Notice]:', err.message || err);
+      console.warn('[UTeM Ride Email First-Attempt Warning, Retrying...]:', err?.message);
+      // Retry once immediately on transient network hiccup
+      await new Promise((res) => setTimeout(res, 500));
+      await sendSignInLinkToEmail(auth, cleanDestination, actionCodeSettings);
     }
   }
 
@@ -62,16 +63,30 @@ export async function sendOtpCode(
       ? cleanDestination
       : `+60${cleanDestination.replace(/^0/, '')}`;
     console.log(`[UTeM Ride Phone Auth SMS] Dispatched 6-digit OTP ${otpCode} to ${formattedPhone}`);
+    
+    // Attempt REST call to Firebase Identity Toolkit verification API if enabled
+    try {
+      const apiKey = process.env.EXPO_PUBLIC_FIREBASE_API_KEY;
+      if (apiKey) {
+        await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phoneNumber: formattedPhone }),
+        });
+      }
+    } catch (apiErr) {
+      console.warn('[UTeM Ride SMS REST Call Notice]:', apiErr);
+    }
   }
 
-  const emailTextCustom = `We received a request to verify your account for UTeM Ride using this email address, at ${nowUtc}. If you want to verify with your ${cleanDestination} account, enter code ${otpCode} or click the link sent to your inbox. Thanks, UTeM Ride team.`;
+  const emailTextCustom = `We received a request to verify your account for UTeM Ride using this email address, at ${nowUtc}. If you want to verify with your ${cleanDestination} account, click the link sent to your inbox: Sign in to UTeM Ride... Thanks, UTeM Ride team.`;
 
   return {
     success: true,
     otpCode,
     message: channel === 'email' 
       ? emailTextCustom 
-      : `A 6-digit 2FA verification code has been dispatched to ${cleanDestination} via UTeM Ride Phone SMS.`,
+      : `A 6-digit 2FA verification code has been dispatched to ${cleanDestination} via Phone SMS.`,
   };
 }
 
@@ -84,50 +99,34 @@ export async function verifyOtpCode(userId: string, inputCode: string): Promise<
 
   const userRef = doc(db, 'users', userId);
   const snap = await getDoc(userRef);
-  if (!snap.exists()) throw new Error('User account not found.');
+
+  if (!snap.exists()) {
+    throw new Error('User record not found.');
+  }
 
   const data = snap.data();
-  const storedCode = data?.otp_code;
-  const expiresAt = data?.otp_expires_at;
+  const savedOtp = data.otp_code;
+  const expiresAt = data.otp_expires_at;
 
-  // Master test bypass code for instant verification
-  if (cleanCode === '123456') {
-    await updateDoc(userRef, {
-      is_2FA_verified: true,
-      totp_enabled_at: serverTimestamp(),
-      updated_at: serverTimestamp(),
-      otp_code: null,
-      otp_expires_at: null,
-    });
-    return true;
+  if (!savedOtp) {
+    throw new Error('No active verification request found. Please request a new 2FA code.');
   }
 
-  if (!storedCode) {
-    throw new Error('No active OTP request found. Please tap "Send 6-Digit OTP Code" first.');
+  if (Date.now() > expiresAt) {
+    throw new Error('Verification code has expired. Please request a new code.');
   }
 
-  if (expiresAt && Date.now() > expiresAt) {
-    throw new Error('The OTP code has expired. Please request a new code.');
+  if (cleanCode !== savedOtp) {
+    throw new Error('Incorrect 6-digit verification code. Please check and try again.');
   }
 
-  if (storedCode !== cleanCode) {
-    throw new Error('Invalid OTP code. Please check your inbox or phone SMS messages and try again.');
-  }
-
+  // Update Firestore user document with 2FA verified status
   await updateDoc(userRef, {
     is_2FA_verified: true,
-    totp_enabled_at: serverTimestamp(),
-    updated_at: serverTimestamp(),
     otp_code: null,
     otp_expires_at: null,
+    updated_at: serverTimestamp(),
   });
 
   return true;
 }
-
-// Backwards compatibility aliases
-export async function setupTotpAuthenticator(userId: string, email: string) {
-  return { secret: '2FA_OTP', otpauthUrl: '' };
-}
-
-export const verifyTotpCode = verifyOtpCode;

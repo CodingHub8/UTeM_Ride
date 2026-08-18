@@ -320,20 +320,6 @@ export default function DriverProfileScreen() {
       {/* Security */}
       <Text style={styles.sectionTitle}>Security</Text>
       <View style={[styles.card, dynamicStyles.card]}>
-        <TouchableOpacity style={[styles.settingRow, dynamicStyles.border]} onPress={() => setShow2FA(true)}>
-          <View style={styles.settingLeft}>
-            <Ionicons name="shield-checkmark-outline" size={20} color={user?.is_2FA_verified ? Colors.success : Colors.warning} />
-            <Text style={[styles.settingLabel, dynamicStyles.text]}>Two-Factor Authentication</Text>
-          </View>
-          <Text style={{ color: user?.is_2FA_verified ? Colors.success : Colors.warning, fontWeight: FontWeight.semibold, fontSize: FontSize.sm }}>
-            {user?.is_2FA_verified ? 'Verified' : 'Verify now'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Security */}
-      <Text style={styles.sectionTitle}>Security</Text>
-      <View style={[styles.card, dynamicStyles.card]}>
         <TouchableOpacity
           style={[styles.settingRow, dynamicStyles.border]}
           onPress={() => {

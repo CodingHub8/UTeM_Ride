@@ -11,6 +11,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/utils/firebase';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from '@/constants/theme';
 import { sendOtpCode, verifyOtpCode, OtpChannel } from '@/utils/twoFactor';
 
@@ -76,6 +78,20 @@ export default function TwoFactorModal({
     }
   }, [visible, email, phoneNumber]);
 
+  // Real-time listener: Auto-close modal as soon as 2FA status becomes verified
+  useEffect(() => {
+    if (!visible || !userId) return;
+    const userRef = doc(db, 'users', userId);
+    const unsub = onSnapshot(userRef, (snap) => {
+      if (snap.exists() && snap.data()?.is_2FA_verified) {
+        onVerified();
+        onClose();
+        Alert.alert('Success 🎉', 'Two-Factor Authentication (2FA) is verified and enabled.');
+      }
+    });
+    return unsub;
+  }, [visible, userId]);
+
   const handleSendOtp = async () => {
     const destination = channel === 'email' ? emailInput : phoneInput;
     if (!destination || destination.trim().length === 0) {
@@ -88,16 +104,23 @@ export default function TwoFactorModal({
 
     setLoading(true);
     try {
-      const result = await sendOtpCode(userId, channel, destination);
+      await sendOtpCode(userId, channel, destination);
       setOtpSent(true);
       setResendTimer(60);
 
-      Alert.alert(
-        '2FA Verification Code Sent 📲',
-        `A 6-digit verification code has been dispatched to ${destination.trim()} via ${channel === 'email' ? 'UTeM Email' : 'SMS/WhatsApp'}.\n\nPlease check your inbox/messages and enter the code below.`
-      );
+      if (channel === 'email') {
+        Alert.alert(
+          'Verification Email Sent 📧',
+          `A verification link has been dispatched to ${destination.trim()}.\n\nPlease check your inbox and tap the link to verify your account.`
+        );
+      } else {
+        Alert.alert(
+          '2FA SMS Code Sent 📲',
+          `A 6-digit verification code has been sent via SMS to ${destination.trim()}.\n\nPlease enter the code below.`
+        );
+      }
     } catch (e: any) {
-      Alert.alert('Send Error', e.message || 'Could not send OTP code.');
+      Alert.alert('Send Error', e.message || 'Could not send verification request.');
     } finally {
       setLoading(false);
     }
@@ -134,7 +157,7 @@ export default function TwoFactorModal({
             </View>
 
             <Text style={[styles.sub, dynamic.sub]}>
-              Select your preferred channel to receive a 6-digit security OTP code:
+              Select your preferred channel to verify your account:
             </Text>
 
             {/* Channel Tabs */}
@@ -144,7 +167,7 @@ export default function TwoFactorModal({
                   styles.channelTab,
                   channel === 'email' ? styles.channelTabActive : dynamic.tabInactive,
                 ]}
-                onPress={() => setChannel('email')}
+                onPress={() => { setChannel('email'); setOtpSent(false); setCode(''); }}
                 activeOpacity={0.7}
               >
                 <Ionicons
@@ -158,7 +181,7 @@ export default function TwoFactorModal({
                     channel === 'email' ? styles.channelTabTextActive : dynamic.sub,
                   ]}
                 >
-                  UTeM Email
+                  UTeM Email Link
                 </Text>
               </TouchableOpacity>
 
@@ -167,7 +190,7 @@ export default function TwoFactorModal({
                   styles.channelTab,
                   channel === 'sms' ? styles.channelTabActive : dynamic.tabInactive,
                 ]}
-                onPress={() => setChannel('sms')}
+                onPress={() => { setChannel('sms'); setOtpSent(false); setCode(''); }}
                 activeOpacity={0.7}
               >
                 <Ionicons
@@ -181,7 +204,7 @@ export default function TwoFactorModal({
                     channel === 'sms' ? styles.channelTabTextActive : dynamic.sub,
                   ]}
                 >
-                  SMS / WhatsApp
+                  SMS Phone OTP
                 </Text>
               </TouchableOpacity>
             </View>
@@ -202,7 +225,7 @@ export default function TwoFactorModal({
               </View>
             ) : (
               <View style={styles.fieldGroup}>
-                <Text style={[styles.label, dynamic.sub]}>Mobile Phone Number (SMS/WhatsApp)</Text>
+                <Text style={[styles.label, dynamic.sub]}>Mobile Phone Number (SMS)</Text>
                 <TextInput
                   style={[styles.input, dynamic.input]}
                   value={phoneInput}
@@ -214,7 +237,7 @@ export default function TwoFactorModal({
               </View>
             )}
 
-            {/* Send OTP Button */}
+            {/* Send Request Button */}
             <TouchableOpacity
               style={[styles.sendBtn, resendTimer > 0 && styles.disabledBtn]}
               onPress={handleSendOtp}
@@ -224,29 +247,45 @@ export default function TwoFactorModal({
                 <ActivityIndicator color={Colors.white} />
               ) : (
                 <Text style={styles.sendBtnText}>
-                  {resendTimer > 0 ? `Resend Code in ${resendTimer}s` : otpSent ? 'Resend 6-Digit OTP' : 'Send 6-Digit OTP Code'}
+                  {resendTimer > 0
+                    ? `Resend in ${resendTimer}s`
+                    : channel === 'email'
+                    ? otpSent ? 'Resend Verification Email' : 'Send Verification Email'
+                    : otpSent ? 'Resend 6-Digit SMS OTP' : 'Send 6-Digit SMS OTP'}
                 </Text>
               )}
             </TouchableOpacity>
 
-            {/* OTP Code Input */}
-            <View style={[styles.fieldGroup, { marginTop: Spacing.md }]}>
-              <Text style={[styles.label, dynamic.sub]}>Enter 6-Digit OTP Code</Text>
-              <TextInput
-                style={[styles.otpInput, dynamic.input]}
-                value={code}
-                onChangeText={setCode}
-                placeholder="──────"
-                placeholderTextColor={Colors.gray400}
-                keyboardType="number-pad"
-                maxLength={6}
-              />
-            </View>
+            {/* Email Status vs SMS Code Input */}
+            {channel === 'email' && otpSent && (
+              <View style={styles.infoBox}>
+                <Ionicons name="information-circle-outline" size={20} color={Colors.primary} />
+                <Text style={[styles.infoText, dynamic.sub]}>
+                  A verification link was sent to <Text style={{ fontWeight: 'bold' }}>{emailInput}</Text>. Check your inbox and tap the link to verify. This window will close automatically once verified.
+                </Text>
+              </View>
+            )}
 
-            {/* Verify Button */}
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleVerify} disabled={loading || code.length < 6}>
-              {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.primaryText}>Verify & Enable 2FA</Text>}
-            </TouchableOpacity>
+            {channel === 'sms' && (
+              <>
+                <View style={[styles.fieldGroup, { marginTop: Spacing.md }]}>
+                  <Text style={[styles.label, dynamic.sub]}>Enter 6-Digit SMS Code</Text>
+                  <TextInput
+                    style={[styles.otpInput, dynamic.input]}
+                    value={code}
+                    onChangeText={setCode}
+                    placeholder="──────"
+                    placeholderTextColor={Colors.gray400}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                  />
+                </View>
+
+                <TouchableOpacity style={styles.primaryBtn} onPress={handleVerify} disabled={loading || code.length < 6}>
+                  {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.primaryText}>Verify & Enable 2FA</Text>}
+                </TouchableOpacity>
+              </>
+            )}
 
             <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
               <Text style={[styles.cancelText, dynamic.sub]}>Cancel</Text>
@@ -281,45 +320,53 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   channelTabText: { fontSize: FontSize.xs, fontWeight: FontWeight.semibold },
-  channelTabTextActive: { color: Colors.white, fontWeight: FontWeight.bold },
-  fieldGroup: { marginBottom: Spacing.xs },
-  label: { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, marginBottom: 4 },
+  channelTabTextActive: { color: Colors.white },
+  fieldGroup: { marginBottom: Spacing.sm },
+  label: { fontSize: FontSize.xs, marginBottom: 4 },
   input: {
-    height: 46,
-    borderRadius: BorderRadius.md,
     borderWidth: 1,
+    borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
-    marginBottom: Spacing.sm,
+    paddingVertical: 10,
     fontSize: FontSize.md,
   },
   otpInput: {
-    height: 52,
-    borderRadius: BorderRadius.md,
     borderWidth: 1,
+    borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
-    marginBottom: Spacing.md,
-    fontSize: FontSize.xl,
+    paddingVertical: 12,
+    fontSize: 24,
     letterSpacing: 8,
     textAlign: 'center',
-    fontWeight: FontWeight.bold,
+    fontWeight: 'bold',
   },
   sendBtn: {
-    backgroundColor: Colors.info,
-    borderRadius: BorderRadius.md,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  sendBtnText: { color: Colors.white, fontWeight: FontWeight.bold, fontSize: FontSize.sm },
-  disabledBtn: { opacity: 0.6 },
-  primaryBtn: {
     backgroundColor: Colors.primary,
+    paddingVertical: 12,
     borderRadius: BorderRadius.md,
-    paddingVertical: 14,
     alignItems: 'center',
     marginTop: Spacing.xs,
   },
+  disabledBtn: { opacity: 0.6 },
+  sendBtnText: { color: Colors.white, fontWeight: FontWeight.bold, fontSize: FontSize.md },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.primary + '15',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.md,
+  },
+  infoText: { flex: 1, fontSize: FontSize.xs, lineHeight: 18 },
+  primaryBtn: {
+    backgroundColor: Colors.success,
+    paddingVertical: 12,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    marginTop: Spacing.md,
+  },
   primaryText: { color: Colors.white, fontWeight: FontWeight.bold, fontSize: FontSize.md },
-  cancelBtn: { alignItems: 'center', marginTop: Spacing.md },
+  cancelBtn: { alignItems: 'center', paddingVertical: Spacing.sm, marginTop: Spacing.xs },
   cancelText: { fontSize: FontSize.sm },
 });
