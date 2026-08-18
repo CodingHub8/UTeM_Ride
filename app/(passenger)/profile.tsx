@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,10 +11,16 @@ import TwoFactorModal from '@/components/TwoFactorModal';
 export default function PassengerProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, logout, switchRole, refreshProfile } = useAuth();
-  const { themeMode, setTheme, isDark, colors } = useTheme();
+  const { user, logout, switchRole } = useAuth();
+  const { themeMode, setTheme, isDark } = useTheme();
   const [notifications, setNotifications] = useState(true);
   const [show2FA, setShow2FA] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 800);
+  };
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? Colors.darkBg : Colors.gray50 },
@@ -25,7 +31,11 @@ export default function PassengerProfileScreen() {
   };
 
   return (
-    <ScrollView style={[styles.container, dynamicStyles.container, { paddingTop: insets.top }]} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={[styles.container, dynamicStyles.container, { paddingTop: insets.top }]}
+      contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} tintColor={Colors.primary} />}
+    >
       {/* Profile Header */}
       <View style={styles.profileHeader}>
         <View style={styles.avatar}>
@@ -61,23 +71,22 @@ export default function PassengerProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Saved Addresses */}
-      <Text style={styles.sectionTitle}>Saved Addresses</Text>
-      <View style={[styles.card, dynamicStyles.card]}>
-        <ProfileRow icon="home-outline" label="Home" value="Not set" isDark={isDark} />
-        <ProfileRow icon="business-outline" label="Campus" value="UTeM Main Campus" isDark={isDark} last />
-      </View>
-
       {/* Security */}
       <Text style={styles.sectionTitle}>Security</Text>
       <View style={[styles.card, dynamicStyles.card]}>
-        <TouchableOpacity style={[styles.settingRow, dynamicStyles.border]} onPress={() => setShow2FA(true)}>
+        <TouchableOpacity
+          style={[styles.settingRow, dynamicStyles.border]}
+          onPress={() => {
+            if (!user?.is_2FA_verified) setShow2FA(true);
+          }}
+          activeOpacity={user?.is_2FA_verified ? 1 : 0.7}
+        >
           <View style={styles.settingLeft}>
             <Ionicons name="shield-checkmark-outline" size={20} color={user?.is_2FA_verified ? Colors.success : Colors.warning} />
             <Text style={[styles.settingLabel, dynamicStyles.text]}>Two-Factor Authentication</Text>
           </View>
           <Text style={{ color: user?.is_2FA_verified ? Colors.success : Colors.warning, fontWeight: FontWeight.semibold, fontSize: FontSize.sm }}>
-            {user?.is_2FA_verified ? 'Verified' : 'Verify now'}
+            {user?.is_2FA_verified ? 'Verified ✓' : 'Verify now'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -138,11 +147,11 @@ export default function PassengerProfileScreen() {
 
       {/* Switch & Logout */}
       <TouchableOpacity style={styles.switchBtn} onPress={() => { switchRole(); router.replace('/(driver)/home'); }}>
-        <Ionicons name="swap-horizontal" size={20} color={Colors.accent} />
+        <Ionicons name="swap-horizontal" size={20} color={Colors.primary} />
         <Text style={styles.switchText}>Switch to Driver Mode</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.logoutBtn} onPress={() => { logout(); router.replace('/(auth)/login'); }}>
+      <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
         <Ionicons name="log-out-outline" size={20} color={Colors.error} />
         <Text style={styles.logoutText}>Log Out</Text>
       </TouchableOpacity>
@@ -154,7 +163,7 @@ export default function PassengerProfileScreen() {
           userId={user.id}
           email={user.email}
           phoneNumber={user.phone}
-          onVerified={refreshProfile}
+          onVerified={() => {}}
           isDark={isDark}
         />
       )}
@@ -162,13 +171,25 @@ export default function PassengerProfileScreen() {
   );
 }
 
-function ProfileRow({ icon, label, value, last, isDark }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; last?: boolean; isDark: boolean }) {
+function ProfileRow({
+  icon,
+  label,
+  value,
+  isDark,
+  last,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  isDark: boolean;
+  last?: boolean;
+}) {
   return (
-    <View style={[styles.profileRow, !last && { borderBottomWidth: 1, borderBottomColor: isDark ? Colors.darkBorder : Colors.gray100 }]}>
-      <Ionicons name={icon} size={20} color={isDark ? Colors.gray500 : Colors.gray400} />
-      <View style={styles.profileRowInfo}>
-        <Text style={styles.profileRowLabel}>{label}</Text>
-        <Text style={[styles.profileRowValue, { color: isDark ? Colors.white : Colors.gray900 }]}>{value}</Text>
+    <View style={[styles.row, !last && { borderBottomWidth: 1, borderBottomColor: isDark ? Colors.darkBorder : Colors.gray100 }]}>
+      <Ionicons name={icon} size={20} color={isDark ? Colors.gray400 : Colors.gray500} />
+      <View style={styles.rowContent}>
+        <Text style={[styles.rowLabel, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>{label}</Text>
+        <Text style={[styles.rowValue, { color: isDark ? Colors.white : Colors.gray900 }]}>{value}</Text>
       </View>
     </View>
   );
@@ -176,42 +197,86 @@ function ProfileRow({ icon, label, value, last, isDark }: { icon: keyof typeof I
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { paddingBottom: Spacing.xxl },
-  profileHeader: { alignItems: 'center', paddingVertical: Spacing.xl },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center', marginBottom: Spacing.sm },
-  name: { fontSize: FontSize.xl, fontWeight: FontWeight.bold },
-  email: { fontSize: FontSize.sm, marginTop: 2 },
-  roleBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: Colors.primary + '12', borderRadius: BorderRadius.full, paddingHorizontal: Spacing.md, paddingVertical: 4, marginTop: Spacing.sm },
-  roleText: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, color: Colors.primary },
-  sectionTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.gray400, textTransform: 'uppercase', letterSpacing: 0.5, paddingHorizontal: Spacing.lg, marginTop: Spacing.lg, marginBottom: Spacing.sm },
-  card: { marginHorizontal: Spacing.md, borderRadius: BorderRadius.lg, ...Shadows.sm },
-  profileRow: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md },
-  profileRowInfo: { marginLeft: Spacing.md, flex: 1 },
-  profileRowLabel: { fontSize: FontSize.xs, color: Colors.gray400 },
-  profileRowValue: { fontSize: FontSize.md, fontWeight: FontWeight.medium, marginTop: 1 },
-  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: Spacing.md },
+  content: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 40 },
+  profileHeader: { alignItems: 'center', marginVertical: Spacing.sm },
+  avatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
+    ...Shadows.md,
+  },
+  name: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, marginBottom: 2 },
+  email: { fontSize: FontSize.sm, marginBottom: Spacing.xs },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.primary + '15',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+  },
+  roleText: { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, color: Colors.primary },
+  sectionTitle: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.gray500,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: Spacing.xs,
+  },
+  card: { borderRadius: BorderRadius.lg, padding: Spacing.sm, ...Shadows.sm },
+  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.md, paddingHorizontal: Spacing.xs },
+  rowContent: { flex: 1 },
+  rowLabel: { fontSize: FontSize.xs },
+  rowValue: { fontSize: FontSize.md, fontWeight: FontWeight.medium, marginTop: 2 },
+  addBtn: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.md, paddingHorizontal: Spacing.xs },
   addBtnText: { fontSize: FontSize.md, color: Colors.primary, fontWeight: FontWeight.medium },
-  settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: Spacing.md },
-  settingLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Spacing.md, paddingHorizontal: Spacing.xs },
+  settingLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   settingLabel: { fontSize: FontSize.md },
-  switchBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.accent + '15', marginHorizontal: Spacing.md, borderRadius: BorderRadius.md, paddingVertical: 14, marginTop: Spacing.xl },
-  switchText: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.accent },
-  logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, marginHorizontal: Spacing.md, borderRadius: BorderRadius.md, paddingVertical: 14, marginTop: Spacing.sm },
-  logoutText: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.error },
   themeSelectorGroup: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.xs,
-    marginTop: Spacing.xs,
+    paddingTop: 2,
   },
   themeSelectorBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
     borderRadius: BorderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   themeSelectorText: {
-    fontSize: FontSize.sm,
+    fontSize: FontSize.xs,
     fontWeight: FontWeight.medium,
   },
+  switchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    marginTop: Spacing.sm,
+  },
+  switchText: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.primary },
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.error + '10',
+  },
+  logoutText: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.error },
 });

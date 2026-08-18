@@ -535,12 +535,21 @@ function startDatabaseListeners() {
         // Approved Driver: is_verified is true
         // Rejected Driver: rejection_reason is populated or status === 'rejected'
         // Pending Driver: otherwise
+        let isDriverVerified = false;
+        if (userData.is_verified === true) {
+          isDriverVerified = true;
+        } else if (userData.is_verified === false) {
+          isDriverVerified = false;
+        } else if (userDoc.is_verified === true) {
+          isDriverVerified = true;
+        }
+
         let status = 'pending';
         if (role === 'passenger') {
           status = 'approved';
         } else if (userData.status === 'banned' || userDoc.status === 'banned' || userData.is_banned === true) {
           status = 'banned';
-        } else if (userData.is_verified === true || userDoc.is_verified === true) {
+        } else if (isDriverVerified) {
           status = 'approved';
         } else if (userData.rejection_reason || userDoc.rejection_reason || userData.status === 'rejected') {
           status = 'rejected';

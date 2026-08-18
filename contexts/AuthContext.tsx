@@ -11,6 +11,7 @@ import {
   setDoc,
   getDoc,
   updateDoc,
+  onSnapshot,
   serverTimestamp,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -179,6 +180,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     return unsubscribe;
   }, []);
+
+  // Real-time synchronization of user profile data (is_2FA_verified, is_verified, etc.)
+  useEffect(() => {
+    if (!user?.id) return;
+    const userRef = doc(db, 'users', user.id);
+    const unsub = onSnapshot(userRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setUser((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            is_2FA_verified: data.is_2FA_verified ?? prev.is_2FA_verified,
+            is_verified: data.is_verified ?? prev.is_verified,
+            phone: data.phone || prev.phone,
+            email: data.email || prev.email,
+            vehicleModel: data.vehicleModel || prev.vehicleModel,
+            vehiclePlate: data.vehiclePlate || prev.vehiclePlate,
+            vehicleColor: data.vehicleColor || prev.vehicleColor,
+          };
+        });
+      }
+    });
+    return unsub;
+  }, [user?.id]);
 
   // Automatically toggle driver online status based on app lifecycle (Foreground = online, Background/Inactive = offline)
   useEffect(() => {

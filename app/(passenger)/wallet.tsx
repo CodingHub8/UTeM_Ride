@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Modal, ScrollView, Alert, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Modal, ScrollView, Alert, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
@@ -339,6 +339,7 @@ export default function PassengerWalletScreen() {
           data={transactions}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.txList}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={() => setLoading(true)} colors={[Colors.primary]} tintColor={Colors.primary} />}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="receipt-outline" size={64} color={isDark ? Colors.gray700 : Colors.gray300} />

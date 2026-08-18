@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Modal, ScrollView, Alert, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Modal, ScrollView, Alert, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
@@ -64,6 +64,12 @@ export default function WalletScreen() {
   
   const [bankSaving, setBankSaving] = useState(false);
   const [withdrawLoading, setWithdrawLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 800);
+  };
 
   // 1. Listen to real-time transactions from Firestore
   useEffect(() => {
@@ -90,15 +96,18 @@ export default function WalletScreen() {
           if (data.transaction_type === 'fare_payment' && data.amount < 0) return;
         }
 
-        const isCash = data.payment_method === 'cash';
-        const displayAmt = isCash
-          ? `RM ${(data.cash_amount || 0).toFixed(2)} (Cash)`
-          : (data.amount < 0 ? '-' : '') + 'RM ' + Math.abs(data.amount).toFixed(2);
+        const isOutgoing = data.amount < 0 || data.transaction_type === 'withdrawal' || data.transaction_type === 'service_fee';
+        const displayAmt = (isOutgoing ? '- ' : '+ ') + 'RM ' + Math.abs(data.amount || 0).toFixed(2);
+        
+        let label = data.label || 'Transaction';
+        if (data.transaction_type === 'service_fee') {
+          label = `Cash Ride Platform Fee (10%)`;
+        }
 
         txs.push({
           id: doc.id,
-          type: data.transaction_type === 'withdrawal' ? 'withdrawal' : 'trip',
-          label: data.label || (data.transaction_type === 'withdrawal' ? 'Withdrawal' : 'Ride Earnings'),
+          type: isOutgoing ? 'withdrawal' : 'trip',
+          label,
           amount: displayAmt,
           numericAmount: data.amount || 0,
           time: data.created_at ? new Date(data.created_at.seconds * 1000).toLocaleString() : 'Just now',
@@ -316,6 +325,7 @@ export default function WalletScreen() {
         data={transactions}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.txList}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} tintColor={Colors.primary} />}
         renderItem={({ item }) => (
           <View style={[styles.txRow, dynamicStyles.txRow]}>
             <View style={[styles.txIcon, item.type === 'withdrawal' && styles.txIconWithdraw]}>
