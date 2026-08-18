@@ -11,7 +11,7 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createRide } from '@/utils/rides';
 import { processHitPayCheckout, parseAmount } from '@/utils/paymentStore';
-import { collection, addDoc, query, where, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, serverTimestamp, doc, updateDoc, increment } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { checkPassengerOverlap } from '@/utils/validation';
 import { useEffect } from 'react';
@@ -351,6 +351,14 @@ export default function RideRequestScreen() {
                 }
                 paymentId = 'wal_' + Math.random().toString(36).substring(2, 11).toUpperCase();
                 paymentStatus = 'completed';
+
+                // Immediately deduct fare from passenger's Firestore wallet_balance
+                if (user?.id) {
+                  await updateDoc(doc(db, 'users', user.id), {
+                    wallet_balance: increment(-fareAmount),
+                    updated_at: serverTimestamp(),
+                  });
+                }
               } else if (paymentMethod !== 'cash') {
                 try {
                   const checkout = await processHitPayCheckout({

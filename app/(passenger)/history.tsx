@@ -28,6 +28,12 @@ export default function HistoryScreen() {
   const [rides, setRides] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRide, setSelectedRide] = useState<any | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 800);
+  };
 
   useEffect(() => {
     if (!user?.id) {
@@ -151,7 +157,7 @@ export default function HistoryScreen() {
           data={rides}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={() => setLoading(true)} colors={[Colors.primary]} tintColor={Colors.primary} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} tintColor={Colors.primary} />}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="car-outline" size={64} color={isDark ? Colors.gray700 : Colors.gray300} />

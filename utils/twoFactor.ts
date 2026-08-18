@@ -50,10 +50,8 @@ export async function sendOtpCode(
       console.log(`[UTeM Ride Email] Dispatching 2FA email link to ${cleanDestination}`);
       await sendSignInLinkToEmail(auth, cleanDestination, actionCodeSettings);
     } catch (err: any) {
-      console.warn('[UTeM Ride Email First-Attempt Warning, Retrying...]:', err?.message);
-      // Retry once immediately on transient network hiccup
-      await new Promise((res) => setTimeout(res, 500));
-      await sendSignInLinkToEmail(auth, cleanDestination, actionCodeSettings);
+      console.warn('[UTeM Ride Email Dispatch Error]:', err?.message || err);
+      throw new Error(err?.message || 'Failed to send email verification link. Please check your email address.');
     }
   }
 

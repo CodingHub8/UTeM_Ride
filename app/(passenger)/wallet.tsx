@@ -54,6 +54,12 @@ export default function PassengerWalletScreen() {
   const [selectedBank, setSelectedBank] = useState('Maybank2u');
 
   const [bankSaving, setBankSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 800);
+  };
   const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [topupLoading, setTopupLoading] = useState(false);
 
@@ -344,7 +350,7 @@ export default function PassengerWalletScreen() {
           data={transactions}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.txList}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={() => setLoading(true)} colors={[Colors.primary]} tintColor={Colors.primary} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} tintColor={Colors.primary} />}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="receipt-outline" size={64} color={isDark ? Colors.gray700 : Colors.gray300} />
