@@ -262,10 +262,19 @@ export default function CreatePoolScreen() {
       const seatPrice = parseFloat(pool.price_per_seat) || 0;
       const isCashBooking = (booking.payment_method || 'cash') === 'cash';
 
-      // Enforce 3-Ride Cash Quota for drivers
+      // Enforce 3-Ride Cash Quota and Negative Balance Threshold (-RM 5.00) for drivers
       if (isCashBooking && user?.id) {
         const userRef = doc(db, 'users', user.id);
         const userSnap = await getDoc(userRef);
+        const currentBalance = userSnap.data()?.wallet_balance || 0;
+        if (currentBalance <= -5.00) {
+          Alert.alert(
+            'Cash Transaction Restricted',
+            `Your driver e-wallet balance is RM ${currentBalance.toFixed(2)}. Cash transactions will not be enough to deduct the fees. Please accept an online payment ride or top up your e-wallet to accept cash rides.`
+          );
+          return;
+        }
+
         const cashCount = userSnap.data()?.consecutive_cash_rides || 0;
         if (cashCount >= 3) {
           Alert.alert(

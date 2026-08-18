@@ -86,7 +86,19 @@
     </div>
     <h1>2FA Verification Complete! 🎉</h1>
     <p>Your UTeM Ride student email has been verified successfully. You may now return to the app.</p>
-    <a href="utemride://2fa-complete" class="btn">Return to UTeM Ride App</a>
+    <a id="returnBtn" href="utemride://2fa-complete" class="btn">Return to UTeM Ride App</a>
   </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const userId = urlParams.get('userId') || '';
+    const deepLink = 'utemride://2fa-complete' + (userId ? '?userId=' + encodeURIComponent(userId) : '');
+    document.getElementById('returnBtn').setAttribute('href', deepLink);
+
+    // Auto trigger deep link redirect after 1.5 seconds
+    setTimeout(() => {
+      window.location.href = deepLink;
+    }, 1500);
+  </script>
 </body>
 </html>

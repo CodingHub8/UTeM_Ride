@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -129,6 +129,19 @@ export default function DriverRideRequestScreen() {
         [{ text: 'OK' }]
       );
       return;
+    }
+
+    if (ride.payment_method === 'cash') {
+      const userRef = doc(db, 'users', user.id);
+      const userSnap = await getDoc(userRef);
+      const currentBalance = userSnap.data()?.wallet_balance || 0;
+      if (currentBalance <= -5.00) {
+        Alert.alert(
+          'Cash Transaction Restricted',
+          `Your driver e-wallet balance is RM ${currentBalance.toFixed(2)}. Cash transactions will not be enough to deduct the fees. Please accept an online payment ride or top up your e-wallet to accept cash rides.`
+        );
+        return;
+      }
     }
 
     const vehicleStr = user.vehicleColor

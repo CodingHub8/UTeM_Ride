@@ -10,7 +10,7 @@ export function generate6DigitOtp(): string {
 }
 
 /**
- * Dispatches 2FA verification using 100% Pure Native Firebase (Email Link Auth & Firebase Auth Infrastructure)
+ * Dispatches 2FA verification using 100% Pure Native Firebase Auth Infrastructure
  */
 export async function sendOtpCode(
   userId: string,
@@ -39,19 +39,20 @@ export async function sendOtpCode(
   });
 
   const channelLabel = channel === 'email' ? 'UTeM Email' : 'Phone SMS';
+  const nowUtc = new Date().toUTCString();
 
   // 2. Dispatch via 100% Native Firebase Auth Email Link
   if (channel === 'email') {
     try {
-      console.log(`[Pure Firebase Auth Email] Dispatching native email link for ${cleanDestination}`);
+      console.log(`[UTeM Ride Email] Dispatching 2FA email link for ${cleanDestination} at ${nowUtc}`);
       const actionCodeSettings = {
         url: `https://project-utem-ride.web.app/email-verify.html?userId=${userId}`,
         handleCodeInApp: true,
       };
       await sendSignInLinkToEmail(auth, cleanDestination, actionCodeSettings);
-      console.log('[Pure Firebase Auth Email] Successfully sent native Google email to:', cleanDestination);
+      console.log('[UTeM Ride Email] Successfully sent native Google email to:', cleanDestination);
     } catch (err: any) {
-      console.warn('[Pure Firebase Auth Email Notice]:', err.message || err);
+      console.warn('[UTeM Ride Email Notice]:', err.message || err);
     }
   }
 
@@ -60,13 +61,17 @@ export async function sendOtpCode(
     const formattedPhone = cleanDestination.startsWith('+')
       ? cleanDestination
       : `+60${cleanDestination.replace(/^0/, '')}`;
-    console.log(`[Pure Firebase Phone Auth SMS] Dispatched SMS code ${otpCode} to ${formattedPhone}`);
+    console.log(`[UTeM Ride Phone Auth SMS] Dispatched 6-digit OTP ${otpCode} to ${formattedPhone}`);
   }
+
+  const emailTextCustom = `We received a request to verify your account for UTeM Ride using this email address, at ${nowUtc}. If you want to verify with your ${cleanDestination} account, enter code ${otpCode} or click the link sent to your inbox. Thanks, UTeM Ride team.`;
 
   return {
     success: true,
     otpCode,
-    message: `A 6-digit 2FA verification code has been dispatched to ${cleanDestination} via 100% Native Firebase ${channelLabel}.`,
+    message: channel === 'email' 
+      ? emailTextCustom 
+      : `A 6-digit 2FA verification code has been dispatched to ${cleanDestination} via UTeM Ride Phone SMS.`,
   };
 }
 
