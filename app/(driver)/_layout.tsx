@@ -62,6 +62,7 @@ export default function DriverLayout() {
         }}
       />
       {/* Hide non-tab screens */}
+      <Tabs.Screen name="history" options={{ href: null }} />
       <Tabs.Screen name="ride-request" options={{ href: null }} />
       <Tabs.Screen name="active-pickup" options={{ href: null }} />
       <Tabs.Screen name="trip-in-progress" options={{ href: null }} />

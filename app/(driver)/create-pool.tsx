@@ -138,9 +138,9 @@ export default function CreatePoolScreen() {
 
   const calculatedPricePerSeat = useMemo(() => {
     if (distanceKm === null) return 0;
-    const rawTotal = 2.50 + distanceKm * 0.50;
+    const rawTotal = 1.00 + distanceKm * 0.25;
     const perSeat = rawTotal / seats;
-    return parseFloat(Math.max(perSeat, 2.50).toFixed(2));
+    return parseFloat(Math.max(perSeat, 1.20).toFixed(2));
   }, [distanceKm, seats]);
 
   useEffect(() => {

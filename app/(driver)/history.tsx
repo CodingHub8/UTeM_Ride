@@ -9,6 +9,7 @@ import { db } from '@/utils/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useRouter } from 'expo-router';
+import { parseFare } from '@/utils/rides';
 
 const DEFAULT_PICKUP = { latitude: 2.3135, longitude: 102.3211 };
 const DEFAULT_DEST = { latitude: 2.3086, longitude: 102.3197 };
@@ -151,7 +152,7 @@ export default function DriverHistoryScreen() {
             <Text style={[styles.passengerText, dynamicStyles.subText]}>Passenger: {item.passenger_name || 'Passenger'}</Text>
           </View>
           <Text style={[styles.priceText, { color: isDark ? Colors.primaryLight : Colors.primary }]}>
-            RM {parseFloat(item.fare || '0').toFixed(2)}
+            RM {parseFare(item.fare).toFixed(2)}
           </Text>
         </View>
       </TouchableOpacity>
@@ -279,7 +280,7 @@ export default function DriverHistoryScreen() {
                   <View style={styles.detailRow}>
                     <Text style={[styles.detailLabel, dynamicStyles.subText]}>Total Fare</Text>
                     <Text style={[styles.detailValue, { color: isDark ? Colors.primaryLight : Colors.primary, fontWeight: FontWeight.bold }]}>
-                      RM {parseFloat(selectedRide.fare || '0').toFixed(2)}
+                      RM {parseFare(selectedRide.fare).toFixed(2)}
                     </Text>
                   </View>
 

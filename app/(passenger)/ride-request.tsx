@@ -54,25 +54,19 @@ export default function RideRequestScreen() {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
 
-  // Monitor passenger's dynamic wallet balance
+  // Monitor passenger's dynamic wallet balance from user profile document
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'transactions'), where('user_id', '==', user.id));
-    const unsub = onSnapshot(q, (snap) => {
-      let balance = 0;
-      snap.forEach((d) => {
-        const data = d.data();
-        // Exclude driver role transactions
-        if (data.role === 'driver') return;
-        if (!data.role) {
-          // Fallback filtering for older seeded/unlabeled documents
-          if (data.transaction_type === 'service_fee') return;
-          if (data.transaction_type === 'fare_payment' && data.amount > 0 && !data.label?.toLowerCase().includes('refund')) return;
+    const unsub = onSnapshot(doc(db, 'users', user.id), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.passenger_wallet_balance !== undefined) {
+          setWalletBalance(Math.max(0, Number(data.passenger_wallet_balance) || 0));
+        } else if (data.wallet_balance !== undefined) {
+          setWalletBalance(Math.max(0, Number(data.wallet_balance) || 0));
         }
-        balance += Number(data.amount) || 0;
-      });
-      setWalletBalance(Math.max(0, balance));
-    }, (err) => console.warn('[RideRequest] Failed to fetch wallet transactions:', err));
+      }
+    }, (err) => console.warn('[RideRequest] Failed to fetch user profile balance:', err));
     return unsub;
   }, [user]);
 
@@ -355,6 +349,7 @@ export default function RideRequestScreen() {
                 // Immediately deduct fare from passenger's Firestore wallet_balance
                 if (user?.id) {
                   await updateDoc(doc(db, 'users', user.id), {
+                    passenger_wallet_balance: increment(-fareAmount),
                     wallet_balance: increment(-fareAmount),
                     updated_at: serverTimestamp(),
                   });

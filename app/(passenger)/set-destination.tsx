@@ -10,10 +10,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getCurrentLocationAddress, getDirections, getNearbyPlaces, getPlaceAutocomplete, getPlaceDetails, getRecentDestinations, getRecentPickups } from '@/utils/location';
 
 const BASE_FARES = {
-  standard: { base: 4.00, rateKm: 0.90, minFloor: 5.00 },
-  premium: { base: 6.00, rateKm: 1.30, minFloor: 7.50 },
-  motorcycle: { base: 2.80, rateKm: 0.70, minFloor: 3.50 },
-  carpool: { base: 2.50, rateKm: 0.50, minFloor: 3.00 }
+  standard: { base: 1.50, rateKm: 0.45, minFloor: 2.00 },
+  premium: { base: 2.50, rateKm: 0.70, minFloor: 3.50 },
+  motorcycle: { base: 1.00, rateKm: 0.35, minFloor: 1.50 },
+  carpool: { base: 1.00, rateKm: 0.25, minFloor: 1.20 }
 };
 
 const DEFAULT_PICKUP_COORDS = { latitude: 2.3135, longitude: 102.3211 };
