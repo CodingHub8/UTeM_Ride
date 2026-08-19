@@ -77,6 +77,23 @@ export default function ActivePickupScreen() {
     const unsub = onSnapshot(doc(db, 'rides', rideId), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
+        if (data.status === 'cancelled') {
+          Alert.alert('Ride Cancelled', 'The passenger has cancelled this ride.');
+          router.replace('/(driver)/home');
+          return;
+        }
+        if (data.status === 'completed') {
+          Alert.alert('Trip Completed 🎉', 'The trip has been marked as completed.');
+          router.replace('/(driver)/home');
+          return;
+        }
+        if (data.status === 'in_progress') {
+          router.replace({
+            pathname: '/(driver)/trip-in-progress',
+            params: { rideId },
+          });
+          return;
+        }
         if (data.pickup_coords) {
           setPickupCoord({
             latitude: data.pickup_coords.latitude,

@@ -1,5 +1,6 @@
 import { addDoc, collection, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
+import { encryptData, decryptData } from '@/utils/encryption';
 
 export interface ChatMessage {
   id: string;
@@ -8,6 +9,7 @@ export interface ChatMessage {
   sender_name: string;
   sender_role: 'driver' | 'passenger';
   text: string;
+  is_encrypted?: boolean;
   created_at?: number;
 }
 
@@ -16,13 +18,23 @@ export function subscribeRideChat(rideId: string, onMessages: (messages: ChatMes
   return onSnapshot(q, (snap) => {
     const list = snap.docs.map((d) => {
       const data = d.data();
+      let decryptedText = data.text || '';
+      if (data.is_encrypted && decryptedText) {
+        try {
+          const decrypted = decryptData(decryptedText, rideId);
+          if (decrypted) decryptedText = decrypted;
+        } catch {
+          // Fallback if decryption fails
+        }
+      }
       return {
         id: d.id,
         ride_id: rideId,
         sender_id: data.sender_id,
         sender_name: data.sender_name,
         sender_role: data.sender_role,
-        text: data.text,
+        text: decryptedText,
+        is_encrypted: data.is_encrypted ?? true,
         created_at: data.created_at?.toMillis?.() || data.created_at || Date.now(),
       } as ChatMessage;
     });
@@ -39,11 +51,13 @@ export async function sendRideChatMessage(input: {
 }) {
   const trimmed = input.text.trim();
   if (!trimmed) return;
+  const encryptedPayload = encryptData(trimmed, input.rideId);
   await addDoc(collection(db, 'ride_chats', input.rideId, 'messages'), {
     sender_id: input.senderId,
     sender_name: input.senderName,
     sender_role: input.senderRole,
-    text: trimmed,
+    text: encryptedPayload,
+    is_encrypted: true,
     created_at: serverTimestamp(),
   });
 }

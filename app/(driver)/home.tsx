@@ -62,7 +62,19 @@ export default function DriverHomeScreen() {
   const [activeRide, setActiveRide] = useState<any | null>(null);
   const [earnings, setEarnings] = useState<EarningsSummary>({ today: 0, week: 0, todayTrips: 0, weekTrips: 0 });
   const [show2FA, setShow2FA] = useState(false);
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [driverRating, setDriverRating] = useState<number>(5.0);
   const mapRef = useRef<MapView>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const unsub = onSnapshot(doc(db, 'users', user.id), (snap) => {
+      if (snap.exists() && snap.data()?.average_rating !== undefined) {
+        setDriverRating(Number(snap.data().average_rating) || 5.0);
+      }
+    });
+    return unsub;
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -303,8 +315,16 @@ export default function DriverHomeScreen() {
 
         {/* Status bar */}
         <View style={[styles.statusBar, dynamicStyles.statusBar, isOnline && styles.statusBarOnline]}>
-          <View style={[styles.statusDot, isOnline && styles.statusDotOnline]} />
-          <Text style={[styles.statusLabel, dynamicStyles.statusLabel]}>{isOnline ? 'You are online' : 'You are offline'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <View style={[styles.statusDot, isOnline && styles.statusDotOnline]} />
+            <Text style={[styles.statusLabel, dynamicStyles.statusLabel]}>{isOnline ? 'Online' : 'Offline'}</Text>
+            <View style={{ backgroundColor: Colors.warning + '20', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginLeft: 8, flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="star" size={12} color={Colors.warning} style={{ marginRight: 2 }} />
+              <Text style={{ fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.gray900 }}>
+                {driverRating.toFixed(1)}
+              </Text>
+            </View>
+          </View>
           <Switch
             value={isOnline}
             onValueChange={handleToggleOnline}
@@ -321,7 +341,18 @@ export default function DriverHomeScreen() {
 
       {/* Bottom panel */}
       <View style={[styles.panel, dynamicStyles.panel]}>
-        {/* Earnings */}
+        {/* Collapse / Expand Toggle Pill Handle */}
+        <TouchableOpacity 
+          onPress={() => setIsPanelCollapsed(!isPanelCollapsed)}
+          style={{ width: '100%', alignItems: 'center', paddingVertical: 6, marginBottom: 4 }}
+          activeOpacity={0.7}
+        >
+          <View style={{ width: 44, height: 5, borderRadius: 3, backgroundColor: isDark ? Colors.gray700 : Colors.gray300 }} />
+        </TouchableOpacity>
+
+        {!isPanelCollapsed && (
+          <>
+            {/* Earnings */}
         <View style={[styles.earningsCard, dynamicStyles.earningsCard]}>
           <View>
             <Text style={[styles.earningsLabel, dynamicStyles.earningsLabel]}>{"Today's Earnings"}</Text>
@@ -416,7 +447,9 @@ export default function DriverHomeScreen() {
             ))
           )}
         </View>
-      </View>
+      </>
+    )}
+  </View>
 
       {user && (
         <TwoFactorModal

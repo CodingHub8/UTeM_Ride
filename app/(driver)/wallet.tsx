@@ -5,7 +5,7 @@ import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/
 import { useTheme } from '@/contexts/ThemeContext';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, doc, getDoc, updateDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { processBankPayout } from '@/utils/payment';
 
@@ -118,7 +118,11 @@ export default function WalletScreen() {
           numericAmount: data.transaction_type === 'cash_payment' ? 0 : (data.amount || 0),
           time: data.created_at ? new Date(data.created_at.seconds * 1000).toLocaleString() : 'Just now',
           route: data.route,
-          passenger: data.passenger,
+          passenger: data.passenger ? {
+            ...data.passenger,
+            passenger_id: data.passenger.id || data.passenger.user_id || data.passenger_id,
+            username: data.passenger.username || (data.passenger.email?.split('@')[0] ?? 'passenger'),
+          } : undefined,
         });
       });
       setTransactions(txs);
@@ -161,8 +165,37 @@ export default function WalletScreen() {
   // Daily statistics derived dynamically
   const todayTripsCount = transactions.filter(t => t.type === 'trip' && t.time.includes(new Date().toLocaleDateString())).length;
   
-  const handleOpenPassenger = (passenger: PassengerDetails) => {
-    setSelectedPassenger(passenger);
+  const handleOpenPassenger = async (passenger: PassengerDetails & { passenger_id?: string }) => {
+    const rawEmail = passenger.email || '';
+    const localPart = rawEmail.includes('@') ? rawEmail.split('@')[0] : (passenger.username || 'passenger');
+    
+    let fullDetails: PassengerDetails = {
+      name: passenger.name || 'Passenger',
+      username: localPart,
+      email: rawEmail || `${localPart}@student.utem.edu.my`,
+      phone: passenger.phone || 'N/A',
+      gender: passenger.gender || 'N/A',
+    };
+
+    try {
+      if (passenger.passenger_id) {
+        const pSnap = await getDoc(doc(db, 'users', passenger.passenger_id));
+        if (pSnap.exists()) {
+          const pData = pSnap.data();
+          fullDetails.name = pData.name || fullDetails.name;
+          fullDetails.email = pData.email || fullDetails.email;
+          fullDetails.phone = pData.phone || fullDetails.phone;
+          fullDetails.gender = pData.gender || fullDetails.gender;
+          if (pData.email && pData.email.includes('@')) {
+            fullDetails.username = pData.email.split('@')[0];
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Wallet] Failed to fetch passenger user doc:', e);
+    }
+
+    setSelectedPassenger(fullDetails);
     setPassengerModalVisible(true);
   };
 

@@ -51,7 +51,20 @@ export default function RatingModal({
         created_at: serverTimestamp(),
       });
 
-      // 2. Recalculate and update target user's average rating in Firestore
+      // 2. Also update rides/{rideId} document with rating_stars and rating_comment
+      if (rideId) {
+        try {
+          await updateDoc(doc(db, 'rides', rideId), {
+            rating_stars: stars,
+            rating_comment: feedback.trim(),
+            updated_at: serverTimestamp(),
+          });
+        } catch (e) {
+          console.warn('[RatingModal] Failed to update ride document rating:', e);
+        }
+      }
+
+      // 3. Recalculate and update target user's average rating in Firestore
       const userRef = doc(db, 'users', targetUserId);
       const userSnap = await getDoc(userRef);
       if (userSnap.exists()) {

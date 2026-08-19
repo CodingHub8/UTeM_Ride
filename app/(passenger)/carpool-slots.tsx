@@ -581,7 +581,7 @@ export default function CarpoolSlotsScreen() {
           onPress={() => setShowCreateModal(true)}
         >
           <Ionicons name="add" size={18} color={Colors.white} />
-          <Text style={styles.requestBtnText}>+ Request</Text>
+          <Text style={styles.requestBtnText}>Request</Text>
         </TouchableOpacity>
       </View>
 

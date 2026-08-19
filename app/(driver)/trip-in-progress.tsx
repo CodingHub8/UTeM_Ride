@@ -114,6 +114,17 @@ export default function TripInProgressScreen() {
     const unsub = onSnapshot(doc(db, 'rides', rideId), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
+        if (data.status === 'completed' && !completing) {
+          autoCompletedRef.current = true;
+          Alert.alert('Trip Completed 🎉', 'The passenger has marked the trip as completed.');
+          router.replace('/(driver)/home');
+          return;
+        }
+        if (data.status === 'cancelled') {
+          Alert.alert('Trip Cancelled', 'This trip has been cancelled.');
+          router.replace('/(driver)/home');
+          return;
+        }
         let gotCoords = false;
         if (data.pickup_coords) {
           setPickupCoord({ latitude: data.pickup_coords.latitude, longitude: data.pickup_coords.longitude });
@@ -143,7 +154,7 @@ export default function TripInProgressScreen() {
       }
     });
     return unsub;
-  }, [rideId]);
+  }, [rideId, completing]);
 
   useEffect(() => {
     if (hasFit) return;

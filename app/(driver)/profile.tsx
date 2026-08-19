@@ -8,7 +8,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { performOCR } from '@/utils/ocr';
-import { doc, setDoc, getDoc, serverTimestamp, deleteField } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot, serverTimestamp, deleteField } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/utils/firebase';
 import TwoFactorModal from '@/components/TwoFactorModal';
@@ -258,6 +258,22 @@ export default function DriverProfileScreen() {
     }
   };
 
+  const [ratingStats, setRatingStats] = useState({ avg: 5.0, count: 0 });
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const unsub = onSnapshot(doc(db, 'users', user.id), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setRatingStats({
+          avg: Number(data.average_rating) || 5.0,
+          count: Number(data.total_ratings) || 0
+        });
+      }
+    });
+    return unsub;
+  }, [user?.id]);
+
   const dynamicStyles = {
     container: { backgroundColor: isDark ? Colors.darkBg : Colors.gray50 },
     card: { backgroundColor: isDark ? Colors.darkCard : Colors.white },
@@ -281,7 +297,23 @@ export default function DriverProfileScreen() {
         </View>
         <Text style={[styles.name, dynamicStyles.text]}>{user?.name ?? 'Driver'}</Text>
         <Text style={[styles.email, dynamicStyles.subText]}>{user?.email ?? 'driver@utem.edu.my'}</Text>
-        <View style={styles.roleBadge}>
+        
+        {/* Dynamic Star Rating Bar */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 4 }}>
+          {[1, 2, 3, 4, 5].map((s) => (
+            <Ionicons
+              key={s}
+              name={s <= Math.floor(ratingStats.avg) ? "star" : (s - ratingStats.avg <= 0.5 ? "star-half" : "star-outline")}
+              size={18}
+              color={s <= Math.ceil(ratingStats.avg) ? Colors.warning : Colors.gray400}
+            />
+          ))}
+          <Text style={{ fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: isDark ? Colors.primaryLight : Colors.primary, marginLeft: 4 }}>
+            {ratingStats.avg.toFixed(1)} ({ratingStats.count} review{ratingStats.count === 1 ? '' : 's'})
+          </Text>
+        </View>
+
+        <View style={[styles.roleBadge, { marginTop: 8 }]}>
           <Ionicons name="car-sport" size={14} color={Colors.primary} />
           <Text style={styles.roleText}>Driver</Text>
         </View>

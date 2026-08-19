@@ -66,7 +66,12 @@ export default function ChatModal({ visible, onClose, rideId, userId, userName, 
       <KeyboardAvoidingView style={[styles.overlay, dynamic.bg]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={[styles.sheet, dynamic.card]}>
           <View style={styles.header}>
-            <Text style={[styles.title, dynamic.text]}>Ride Chat</Text>
+            <View>
+              <Text style={[styles.title, dynamic.text]}>Ride Chat</Text>
+              <Text style={{ fontSize: 10, color: Colors.success, fontWeight: 'bold', marginTop: 2 }}>
+                🔒 End-to-End Encrypted
+              </Text>
+            </View>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={isDark ? Colors.white : Colors.gray900} />
             </TouchableOpacity>

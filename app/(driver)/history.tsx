@@ -155,6 +155,20 @@ export default function DriverHistoryScreen() {
             RM {parseFare(item.fare).toFixed(2)}
           </Text>
         </View>
+
+        {item.rating_stars && (
+          <View style={{ marginTop: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: isDark ? Colors.darkBorder : Colors.gray100, flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="star" size={14} color={Colors.warning} style={{ marginRight: 4 }} />
+            <Text style={{ fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: Colors.warning, marginRight: 6 }}>
+              {item.rating_stars}.0
+            </Text>
+            {item.rating_comment ? (
+              <Text style={{ fontSize: FontSize.xs, color: isDark ? Colors.gray400 : Colors.gray600, fontStyle: 'italic', flex: 1 }} numberOfLines={1}>
+                "{item.rating_comment}"
+              </Text>
+            ) : null}
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -283,6 +297,17 @@ export default function DriverHistoryScreen() {
                       RM {parseFare(selectedRide.fare).toFixed(2)}
                     </Text>
                   </View>
+
+                  {selectedRide.rating_stars && (
+                    <View style={{ marginTop: 8, padding: 12, borderRadius: BorderRadius.md, backgroundColor: Colors.warning + '12', borderWidth: 1, borderColor: Colors.warning + '30' }}>
+                      <Text style={{ fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: Colors.warning, marginBottom: 4 }}>
+                        Passenger Review ({selectedRide.rating_stars}.0 ⭐)
+                      </Text>
+                      <Text style={{ fontSize: FontSize.sm, color: isDark ? Colors.white : Colors.gray800, fontStyle: selectedRide.rating_comment ? 'normal' : 'italic' }}>
+                        {selectedRide.rating_comment ? `"${selectedRide.rating_comment}"` : 'No written feedback provided.'}
+                      </Text>
+                    </View>
+                  )}
 
                   <View style={styles.addressBox}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.xs }}>
