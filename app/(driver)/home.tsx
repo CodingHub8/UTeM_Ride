@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Switch, Platform, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Switch, Platform, Alert, ScrollView } from 'react-native';
 import { useRouter, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { subscribeDriverEarnings, EarningsSummary } from '@/utils/earnings';
+import { parseFare } from '@/utils/rides';
 import TwoFactorModal from '@/components/TwoFactorModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -341,115 +342,123 @@ export default function DriverHomeScreen() {
 
       {/* Bottom panel */}
       <View style={[styles.panel, dynamicStyles.panel]}>
-        {/* Collapse / Expand Toggle Pill Handle */}
+        {/* Collapse / Expand Toggle Pill Handle & Clear Button */}
         <TouchableOpacity 
           onPress={() => setIsPanelCollapsed(!isPanelCollapsed)}
-          style={{ width: '100%', alignItems: 'center', paddingVertical: 6, marginBottom: 4 }}
+          style={{ width: '100%', alignItems: 'center', paddingVertical: 8 }}
           activeOpacity={0.7}
         >
-          <View style={{ width: 44, height: 5, borderRadius: 3, backgroundColor: isDark ? Colors.gray700 : Colors.gray300 }} />
+          <View style={{ width: 44, height: 5, borderRadius: 3, backgroundColor: isDark ? Colors.gray600 : Colors.gray400, marginBottom: 6 }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? Colors.gray800 : Colors.gray200, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 14 }}>
+            <Ionicons name={isPanelCollapsed ? "chevron-up-circle" : "chevron-down-circle"} size={16} color={Colors.primary} style={{ marginRight: 6 }} />
+            <Text style={{ fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.gray900 }}>
+              {isPanelCollapsed ? "Show Dashboard 📊" : "Hide Panel (Full Map View 🗺️)"}
+            </Text>
+          </View>
         </TouchableOpacity>
 
         {!isPanelCollapsed && (
-          <>
+          <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
             {/* Earnings */}
-        <View style={[styles.earningsCard, dynamicStyles.earningsCard]}>
-          <View>
-            <Text style={[styles.earningsLabel, dynamicStyles.earningsLabel]}>{"Today's Earnings"}</Text>
-            <Text style={[styles.earningsValue, dynamicStyles.earningsValue]}>RM {earnings.today.toFixed(2)}</Text>
-            <Text style={[styles.statLabel, dynamicStyles.statLabel]}>This week: RM {earnings.week.toFixed(2)}</Text>
-          </View>
-          <View style={styles.earningsRight}>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, dynamicStyles.statValue]}>{earnings.todayTrips}</Text>
-              <Text style={[styles.statLabel, dynamicStyles.statLabel]}>Trips Today</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, dynamicStyles.statValue]}>{earnings.weekTrips}</Text>
-              <Text style={[styles.statLabel, dynamicStyles.statLabel]}>Trips Week</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Quick actions */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: Colors.primary + '15', borderColor: Colors.primary + '30' }]}
-            onPress={handleSchedulePool}
-          >
-            <Ionicons name="calendar" size={24} color={Colors.primary} />
-            <Text style={[styles.actionBtnText, dynamicStyles.actionBtnText]}>Schedule / Pool</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: Colors.primary + '15', borderColor: Colors.primary + '30' }]}
-            onPress={() => router.push('/(driver)/wallet')}
-          >
-            <Ionicons name="wallet" size={24} color={Colors.primary} />
-            <Text style={[styles.actionBtnText, dynamicStyles.actionBtnText]}>Earnings</Text>
-          </TouchableOpacity>
-        </View>
-
-        {isOnline && (
-          <TouchableOpacity
-            style={styles.requestCard}
-            onPress={handleViewRequests}
-          >
-            <View style={styles.requestPulse}>
-              <Ionicons name="notifications" size={24} color={Colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.requestTitle, dynamicStyles.requestTitle]}>
-                {pendingCount > 0 ? `${pendingCount} new ride request${pendingCount > 1 ? 's' : ''}` : 'Waiting for requests'}
-              </Text>
-              <Text style={[styles.requestSub, dynamicStyles.requestSub]}>
-                {pendingCount > 0 ? 'Tap to view and accept' : 'Live ride feed enabled'}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={Colors.gray500} />
-          </TouchableOpacity>
-        )}
-
-        {!isOnline && (
-          <View style={styles.offlineCard}>
-            <Ionicons name="car-sport" size={32} color={Colors.gray500} />
-            <Text style={[styles.offlineText, dynamicStyles.offlineText]}>Go online to start receiving ride requests</Text>
-          </View>
-        )}
-
-        {/* Recent Ride History Section */}
-        <View style={{ marginTop: Spacing.md }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.xs }}>
-            <Text style={[styles.statLabel, dynamicStyles.statLabel, { fontWeight: FontWeight.bold }]}>Recent Ride History</Text>
-            <TouchableOpacity onPress={() => router.push('/(driver)/history' as any)}>
-              <Text style={{ fontSize: FontSize.xs, color: Colors.primary, fontWeight: FontWeight.semibold }}>View All</Text>
-            </TouchableOpacity>
-          </View>
-
-          {recentRides.length === 0 ? (
-            <View style={[styles.requestCard, { paddingVertical: Spacing.sm }]}>
-              <Ionicons name="time-outline" size={20} color={Colors.gray400} />
-              <Text style={[styles.requestSub, dynamicStyles.requestSub, { flex: 1 }]}>No completed rides yet</Text>
-            </View>
-          ) : (
-            recentRides.map((ride) => (
-              <View key={ride.id} style={[styles.requestCard, { marginBottom: Spacing.xs, paddingVertical: Spacing.xs }]}>
-                <Ionicons name={ride.status === 'completed' ? 'checkmark-circle' : 'close-circle'} size={22} color={ride.status === 'completed' ? Colors.success : Colors.error} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.requestTitle, dynamicStyles.requestTitle, { fontSize: FontSize.xs }]} numberOfLines={1}>
-                    {ride.pickup_address} → {ride.destination_address}
-                  </Text>
-                  <Text style={[styles.requestSub, dynamicStyles.requestSub, { fontSize: 10 }]}>
-                    {ride.status === 'completed' ? `Completed • RM ${ride.fare}` : 'Cancelled'} • {ride.payment_method === 'cash' ? 'Cash' : 'Online'}
-                  </Text>
+            <View style={[styles.earningsCard, dynamicStyles.earningsCard]}>
+              <View>
+                <Text style={[styles.earningsLabel, dynamicStyles.earningsLabel]}>{"Today's Earnings"}</Text>
+                <Text style={[styles.earningsValue, dynamicStyles.earningsValue]}>RM {earnings.today.toFixed(2)}</Text>
+                <Text style={[styles.statLabel, dynamicStyles.statLabel]}>This week: RM {earnings.week.toFixed(2)}</Text>
+              </View>
+              <View style={styles.earningsRight}>
+                <View style={styles.statItem}>
+                  <Text style={[styles.statValue, dynamicStyles.statValue]}>{earnings.todayTrips}</Text>
+                  <Text style={[styles.statLabel, dynamicStyles.statLabel]}>Trips Today</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={[styles.statValue, dynamicStyles.statValue]}>{earnings.weekTrips}</Text>
+                  <Text style={[styles.statLabel, dynamicStyles.statLabel]}>Trips Week</Text>
                 </View>
               </View>
-            ))
-          )}
-        </View>
-      </>
-    )}
-  </View>
+            </View>
+
+            {/* Quick actions */}
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: Colors.primary + '15', borderColor: Colors.primary + '30' }]}
+                onPress={handleSchedulePool}
+              >
+                <Ionicons name="calendar" size={24} color={Colors.primary} />
+                <Text style={[styles.actionBtnText, dynamicStyles.actionBtnText]}>Schedule / Pool</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: Colors.primary + '15', borderColor: Colors.primary + '30' }]}
+                onPress={() => router.push('/(driver)/wallet')}
+              >
+                <Ionicons name="wallet" size={24} color={Colors.primary} />
+                <Text style={[styles.actionBtnText, dynamicStyles.actionBtnText]}>Earnings</Text>
+              </TouchableOpacity>
+            </View>
+
+            {isOnline && (
+              <TouchableOpacity
+                style={styles.requestCard}
+                onPress={handleViewRequests}
+              >
+                <View style={styles.requestPulse}>
+                  <Ionicons name="notifications" size={24} color={Colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.requestTitle, dynamicStyles.requestTitle]}>
+                    {pendingCount > 0 ? `${pendingCount} new ride request${pendingCount > 1 ? 's' : ''}` : 'Waiting for requests'}
+                  </Text>
+                  <Text style={[styles.requestSub, dynamicStyles.requestSub]}>
+                    {pendingCount > 0 ? 'Tap to view and accept' : 'Live ride feed enabled'}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={Colors.gray500} />
+              </TouchableOpacity>
+            )}
+
+            {!isOnline && (
+              <View style={styles.offlineCard}>
+                <Ionicons name="car-sport" size={32} color={Colors.gray500} />
+                <Text style={[styles.offlineText, dynamicStyles.offlineText]}>Go online to start receiving ride requests</Text>
+              </View>
+            )}
+
+            {/* Recent Ride History Section */}
+            <View style={{ marginTop: Spacing.md }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.xs }}>
+                <Text style={[styles.statLabel, dynamicStyles.statLabel, { fontSize: FontSize.xs, fontWeight: FontWeight.bold, textTransform: 'uppercase' }]}>
+                  Recent Ride History
+                </Text>
+                <TouchableOpacity onPress={() => router.push('/(driver)/history' as any)}>
+                  <Text style={{ fontSize: FontSize.xs, color: Colors.primary, fontWeight: FontWeight.bold }}>View All</Text>
+                </TouchableOpacity>
+              </View>
+
+              {recentRides.length === 0 ? (
+                <View style={[styles.requestCard, { paddingVertical: Spacing.sm }]}>
+                  <Ionicons name="time-outline" size={20} color={Colors.gray400} />
+                  <Text style={[styles.requestSub, dynamicStyles.requestSub, { flex: 1 }]}>No completed rides yet</Text>
+                </View>
+              ) : (
+                recentRides.map((ride) => (
+                  <View key={ride.id} style={[styles.requestCard, { marginBottom: Spacing.xs, paddingVertical: Spacing.xs }]}>
+                    <Ionicons name={ride.status === 'completed' ? 'checkmark-circle' : 'close-circle'} size={22} color={ride.status === 'completed' ? Colors.success : Colors.error} />
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      <Text style={[styles.requestTitle, dynamicStyles.requestTitle, { fontSize: FontSize.xs }]} numberOfLines={1}>
+                        {ride.pickup_address} → {ride.destination_address}
+                      </Text>
+                      <Text style={[styles.requestSub, dynamicStyles.requestSub, { fontSize: 10 }]}>
+                        {ride.status === 'completed' ? `Completed • RM ${parseFare(ride.fare).toFixed(2)}` : 'Cancelled'} • {ride.payment_method === 'cash' ? 'Cash' : 'Online'}
+                      </Text>
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+          </ScrollView>
+        )}
+      </View>
 
       {user && (
         <TwoFactorModal

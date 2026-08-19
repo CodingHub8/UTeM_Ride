@@ -5,7 +5,7 @@ import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/
 import { useTheme } from '@/contexts/ThemeContext';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, query, where, onSnapshot, addDoc, doc, getDoc, updateDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, doc, getDoc, getDocs, updateDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 import { processBankPayout } from '@/utils/payment';
 
@@ -17,11 +17,6 @@ interface PassengerDetails {
   gender: string;
 }
 
-interface RouteInfo {
-  pickup: string;
-  destination: string;
-}
-
 interface Transaction {
   id: string;
   type: 'trip' | 'withdrawal';
@@ -29,8 +24,8 @@ interface Transaction {
   amount: string;
   numericAmount: number;
   time: string;
-  route?: RouteInfo;
-  passenger?: PassengerDetails;
+  route?: { pickup: string; destination: string };
+  passenger?: PassengerDetails & { passenger_id?: string; ride_id?: string };
 }
 
 const MALAYSIAN_BANKS = [
@@ -120,7 +115,8 @@ export default function WalletScreen() {
           route: data.route,
           passenger: data.passenger ? {
             ...data.passenger,
-            passenger_id: data.passenger.id || data.passenger.user_id || data.passenger_id,
+            passenger_id: data.passenger_id || data.passenger?.id || data.passenger?.user_id,
+            ride_id: data.ride_id,
             username: data.passenger.username || (data.passenger.email?.split('@')[0] ?? 'passenger'),
           } : undefined,
         });
@@ -165,34 +161,56 @@ export default function WalletScreen() {
   // Daily statistics derived dynamically
   const todayTripsCount = transactions.filter(t => t.type === 'trip' && t.time.includes(new Date().toLocaleDateString())).length;
   
-  const handleOpenPassenger = async (passenger: PassengerDetails & { passenger_id?: string }) => {
-    const rawEmail = passenger.email || '';
-    const localPart = rawEmail.includes('@') ? rawEmail.split('@')[0] : (passenger.username || 'passenger');
-    
+  const handleOpenPassenger = async (passenger: PassengerDetails & { passenger_id?: string; ride_id?: string }) => {
     let fullDetails: PassengerDetails = {
       name: passenger.name || 'Passenger',
-      username: localPart,
-      email: rawEmail || `${localPart}@student.utem.edu.my`,
-      phone: passenger.phone || 'N/A',
-      gender: passenger.gender || 'N/A',
+      username: 'passenger',
+      email: passenger.email || 'passenger@student.utem.edu.my',
+      phone: passenger.phone && passenger.phone !== 'N/A' ? passenger.phone : 'N/A',
+      gender: passenger.gender && passenger.gender !== 'N/A' ? passenger.gender : 'N/A',
     };
 
     try {
-      if (passenger.passenger_id) {
-        const pSnap = await getDoc(doc(db, 'users', passenger.passenger_id));
+      let foundUserId = passenger.passenger_id || (passenger as any).id || (passenger as any).user_id;
+
+      // 1. If ride_id is present, query rides collection first for passenger_id
+      if (!foundUserId && passenger.ride_id) {
+        const rideSnap = await getDoc(doc(db, 'rides', passenger.ride_id));
+        if (rideSnap.exists() && rideSnap.data()?.passenger_id) {
+          foundUserId = rideSnap.data().passenger_id;
+        }
+      }
+
+      // 2. Fetch user doc by foundUserId
+      if (foundUserId) {
+        const pSnap = await getDoc(doc(db, 'users', foundUserId));
         if (pSnap.exists()) {
           const pData = pSnap.data();
           fullDetails.name = pData.name || fullDetails.name;
           fullDetails.email = pData.email || fullDetails.email;
           fullDetails.phone = pData.phone || fullDetails.phone;
           fullDetails.gender = pData.gender || fullDetails.gender;
-          if (pData.email && pData.email.includes('@')) {
-            fullDetails.username = pData.email.split('@')[0];
-          }
+        }
+      }
+
+      // 3. Fallback: query users collection by name if phone/gender still missing
+      if ((fullDetails.phone === 'N/A' || fullDetails.gender === 'N/A') && fullDetails.name !== 'Passenger') {
+        const qUsers = query(collection(db, 'users'), where('name', '==', fullDetails.name));
+        const uSnap = await getDocs(qUsers);
+        if (!uSnap.empty) {
+          const uData = uSnap.docs[0].data();
+          fullDetails.email = uData.email || fullDetails.email;
+          fullDetails.phone = uData.phone || fullDetails.phone;
+          fullDetails.gender = uData.gender || fullDetails.gender;
         }
       }
     } catch (e) {
-      console.warn('[Wallet] Failed to fetch passenger user doc:', e);
+      console.warn('[Wallet] Passenger detail lookup error:', e);
+    }
+
+    // Always compute username alias from email prefix (e.g. b032410541@student.utem.edu.my -> b032410541)
+    if (fullDetails.email && fullDetails.email.includes('@')) {
+      fullDetails.username = fullDetails.email.split('@')[0];
     }
 
     setSelectedPassenger(fullDetails);

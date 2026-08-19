@@ -47,6 +47,27 @@ export default function DriverHistoryScreen() {
     }
   };
 
+  const [ratingsMap, setRatingsMap] = useState<Record<string, { stars: number; feedback: string }>>({});
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const qRatings = query(collection(db, 'ratings'), where('target_user_id', '==', user.id));
+    const unsubRatings = onSnapshot(qRatings, (snap) => {
+      const map: Record<string, { stars: number; feedback: string }> = {};
+      snap.docs.forEach((doc) => {
+        const data = doc.data();
+        if (data.ride_id) {
+          map[data.ride_id] = {
+            stars: Number(data.stars) || 5.0,
+            feedback: data.feedback || '',
+          };
+        }
+      });
+      setRatingsMap(map);
+    });
+    return () => unsubRatings();
+  }, [user?.id]);
+
   useEffect(() => {
     if (!user?.id) {
       setRides([]);
@@ -110,13 +131,32 @@ export default function DriverHistoryScreen() {
     modalContent: { backgroundColor: isDark ? Colors.darkCard : Colors.white },
   };
 
+  const renderStars = (stars: number) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {[1, 2, 3, 4, 5].map((s) => (
+        <Ionicons
+          key={s}
+          name={s <= Math.floor(stars) ? "star" : (s - stars <= 0.5 ? "star-half" : "star-outline")}
+          size={14}
+          color={s <= Math.ceil(stars) ? Colors.warning : Colors.gray400}
+          style={{ marginRight: 2 }}
+        />
+      ))}
+      <Text style={{ fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: Colors.warning, marginLeft: 4 }}>
+        {Number(stars).toFixed(1)}
+      </Text>
+    </View>
+  );
+
   const renderRideItem = ({ item }: { item: any }) => {
     const badge = getStatusBadge(item.status);
+    const ratingObj = ratingsMap[item.id] || (item.rating_stars ? { stars: item.rating_stars, feedback: item.rating_comment } : null);
+
     return (
       <TouchableOpacity 
         style={[styles.rideCard, dynamicStyles.card]} 
         activeOpacity={0.7}
-        onPress={() => setSelectedRide(item)}
+        onPress={() => setSelectedRide({ ...item, rating_stars: ratingObj?.stars, rating_comment: ratingObj?.feedback })}
       >
         <View style={styles.cardHeader}>
           <View style={styles.rideTypeContainer}>
@@ -147,24 +187,23 @@ export default function DriverHistoryScreen() {
         </View>
 
         <View style={styles.cardFooter}>
-          <View>
+          <View style={{ flex: 1, marginRight: 8 }}>
             <Text style={[styles.dateText, dynamicStyles.subText]}>{formatDate(item.timestamp)}</Text>
-            <Text style={[styles.passengerText, dynamicStyles.subText]}>Passenger: {item.passenger_name || 'Passenger'}</Text>
+            <Text style={[styles.passengerText, dynamicStyles.title, { fontWeight: FontWeight.medium }]} numberOfLines={1}>
+              {item.passenger_name || 'Passenger'}
+            </Text>
           </View>
           <Text style={[styles.priceText, { color: isDark ? Colors.primaryLight : Colors.primary }]}>
             RM {parseFare(item.fare).toFixed(2)}
           </Text>
         </View>
 
-        {item.rating_stars && (
+        {ratingObj && (
           <View style={{ marginTop: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: isDark ? Colors.darkBorder : Colors.gray100, flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="star" size={14} color={Colors.warning} style={{ marginRight: 4 }} />
-            <Text style={{ fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: Colors.warning, marginRight: 6 }}>
-              {item.rating_stars}.0
-            </Text>
-            {item.rating_comment ? (
-              <Text style={{ fontSize: FontSize.xs, color: isDark ? Colors.gray400 : Colors.gray600, fontStyle: 'italic', flex: 1 }} numberOfLines={1}>
-                "{item.rating_comment}"
+            {renderStars(ratingObj.stars)}
+            {ratingObj.feedback ? (
+              <Text style={{ fontSize: FontSize.xs, color: isDark ? Colors.gray400 : Colors.gray600, fontStyle: 'italic', flex: 1, marginLeft: 8 }} numberOfLines={1}>
+                "{ratingObj.feedback}"
               </Text>
             ) : null}
           </View>
@@ -300,9 +339,12 @@ export default function DriverHistoryScreen() {
 
                   {selectedRide.rating_stars && (
                     <View style={{ marginTop: 8, padding: 12, borderRadius: BorderRadius.md, backgroundColor: Colors.warning + '12', borderWidth: 1, borderColor: Colors.warning + '30' }}>
-                      <Text style={{ fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: Colors.warning, marginBottom: 4 }}>
-                        Passenger Review ({selectedRide.rating_stars}.0 ⭐)
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                        <Text style={{ fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: Colors.warning, marginRight: 6 }}>
+                          Passenger Review
+                        </Text>
+                        {renderStars(selectedRide.rating_stars)}
+                      </View>
                       <Text style={{ fontSize: FontSize.sm, color: isDark ? Colors.white : Colors.gray800, fontStyle: selectedRide.rating_comment ? 'normal' : 'italic' }}>
                         {selectedRide.rating_comment ? `"${selectedRide.rating_comment}"` : 'No written feedback provided.'}
                       </Text>

@@ -257,6 +257,8 @@ export async function createRideTransactions(input: CreateRideTransactionsInput)
   const netEarnings = +(grossAmount - commission).toFixed(2);
 
   const passengerDetails = {
+    id: input.passenger_id,
+    passenger_id: input.passenger_id,
     name: input.passenger_name || 'Passenger',
     username: input.passenger_username || (input.passenger_email?.split('@')[0] ?? 'passenger'),
     email: input.passenger_email || '',
