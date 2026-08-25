@@ -559,7 +559,7 @@ export default function PassengerHomeScreen() {
               )}
 
               {/* Greeting */}
-              <Text style={[styles.greeting, dynamicStyles.text]}>Hello, {user?.name ?? 'there'} 👋</Text>
+              <Text style={[styles.greeting, dynamicStyles.text]}>Hello, {user?.name ?? 'there'}!</Text>
 
               {/* Search Bar */}
               <TouchableOpacity

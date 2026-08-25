@@ -1,10 +1,14 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, FontSize } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
 
 export default function PassengerLayout() {
   const { isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(insets.bottom, 8);
+  const tabHeight = 56 + bottomPadding;
 
   return (
     <Tabs
@@ -16,9 +20,9 @@ export default function PassengerLayout() {
           backgroundColor: isDark ? Colors.darkCard : Colors.white,
           borderTopColor: isDark ? Colors.darkBorder : Colors.gray200,
           borderTopWidth: 1,
-          paddingBottom: 8,
+          paddingBottom: bottomPadding,
           paddingTop: 8,
-          height: 64,
+          height: tabHeight,
         },
         tabBarLabelStyle: {
           fontSize: FontSize.xs,

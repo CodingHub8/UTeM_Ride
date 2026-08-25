@@ -69,10 +69,15 @@ export default function DriverHomeScreen() {
 
   useEffect(() => {
     if (!user?.id) return;
-    const unsub = onSnapshot(doc(db, 'users', user.id), (snap) => {
-      if (snap.exists() && snap.data()?.average_rating !== undefined) {
-        setDriverRating(Number(snap.data().average_rating) || 5.0);
-      }
+    const qRatings = query(collection(db, 'ratings'), where('target_user_id', '==', user.id));
+    const unsub = onSnapshot(qRatings, (snap) => {
+      let sum = 0;
+      const count = snap.docs.length;
+      snap.docs.forEach((docItem) => {
+        sum += Number(docItem.data().stars) || 5;
+      });
+      const avg = count > 0 ? Number((sum / count).toFixed(1)) : 5.0;
+      setDriverRating(avg);
     });
     return unsub;
   }, [user?.id]);
@@ -352,7 +357,7 @@ export default function DriverHomeScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? Colors.gray800 : Colors.gray200, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 14 }}>
             <Ionicons name={isPanelCollapsed ? "chevron-up-circle" : "chevron-down-circle"} size={16} color={Colors.primary} style={{ marginRight: 6 }} />
             <Text style={{ fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.gray900 }}>
-              {isPanelCollapsed ? "Show Dashboard 📊" : "Hide Panel (Full Map View 🗺️)"}
+              {isPanelCollapsed ? "Show Dashboard" : "Hide Panel (Map View)"}
             </Text>
           </View>
         </TouchableOpacity>

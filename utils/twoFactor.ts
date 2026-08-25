@@ -68,22 +68,9 @@ export async function sendOtpCode(
     }
   }
 
-  // 3. Dispatch via Native Firebase Phone Auth (SMS OTP)
+  // 3. Save 2FA OTP record in Firestore user profile for verification
   if (channel === 'sms') {
-    console.log(`[UTeM Ride Phone Auth SMS] Dispatched 6-digit OTP to ${cleanDestination}`);
-    
-    try {
-      const apiKey = process.env.EXPO_PUBLIC_FIREBASE_API_KEY;
-      if (apiKey) {
-        await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phoneNumber: cleanDestination }),
-        });
-      }
-    } catch (apiErr) {
-      console.warn('[UTeM Ride SMS REST Call Notice]:', apiErr);
-    }
+    console.log(`[UTeM Ride Phone Auth SMS] 2FA OTP generated and stored for ${cleanDestination}`);
   }
 
   return {

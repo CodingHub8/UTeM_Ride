@@ -407,14 +407,18 @@ export default function WalletScreen() {
             <View style={{ flex: 1 }}>
               <Text style={[styles.txLabel, dynamicStyles.txLabel]}>{item.label}</Text>
               
-              {item.passenger && (
-                <TouchableOpacity 
-                  style={styles.passengerBadge}
-                  onPress={() => handleOpenPassenger(item.passenger!)}
-                >
-                  <Text style={styles.passengerText}>@{item.passenger.username}</Text>
-                </TouchableOpacity>
-              )}
+              {item.passenger && (() => {
+                const emailVal = item.passenger.email || '';
+                const aliasName = emailVal.includes('@') ? emailVal.split('@')[0] : (item.passenger.username && item.passenger.username !== 'passenger' ? item.passenger.username : 'passenger');
+                return (
+                  <TouchableOpacity 
+                    style={styles.passengerBadge}
+                    onPress={() => handleOpenPassenger(item.passenger!)}
+                  >
+                    <Text style={styles.passengerText}>@{aliasName}</Text>
+                  </TouchableOpacity>
+                );
+              })()}
 
               {item.route && (
                 <Text style={[styles.routeInfoText, dynamicStyles.txTime]}>

@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight, Shadows } from '@/constants/theme';
-import { addDoc, collection, doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, query, where, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from '@/utils/firebase';
 
 interface RatingModalProps {
@@ -64,23 +64,22 @@ export default function RatingModal({
         }
       }
 
-      // 3. Recalculate and update target user's average rating in Firestore
+      // 3. Recalculate target user's average rating directly from all ratings in Firestore
+      const qRatings = query(collection(db, 'ratings'), where('target_user_id', '==', targetUserId));
+      const ratingsSnap = await getDocs(qRatings);
+      let sumStars = 0;
+      const totalCount = ratingsSnap.docs.length;
+      ratingsSnap.docs.forEach((docItem) => {
+        sumStars += Number(docItem.data().stars) || 5;
+      });
+      const newAvg = totalCount > 0 ? Number((sumStars / totalCount).toFixed(1)) : 5.0;
+
       const userRef = doc(db, 'users', targetUserId);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-        const data = userSnap.data();
-        const currentAvg = data.average_rating || 5.0;
-        const currentCount = data.total_ratings || 0;
-
-        const newCount = currentCount + 1;
-        const newAvg = Number(((currentAvg * currentCount + stars) / newCount).toFixed(1));
-
-        await updateDoc(userRef, {
-          average_rating: newAvg,
-          total_ratings: newCount,
-          updated_at: serverTimestamp(),
-        });
-      }
+      await updateDoc(userRef, {
+        average_rating: newAvg,
+        total_ratings: totalCount,
+        updated_at: serverTimestamp(),
+      });
 
       Alert.alert('Rating Submitted', `Thank you for rating ${targetUserName || 'your driver/passenger'}!`);
       onClose();

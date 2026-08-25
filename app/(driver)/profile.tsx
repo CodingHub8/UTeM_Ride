@@ -8,7 +8,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { performOCR } from '@/utils/ocr';
-import { doc, setDoc, getDoc, onSnapshot, serverTimestamp, deleteField } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot, serverTimestamp, deleteField, collection, query, where } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/utils/firebase';
 import TwoFactorModal from '@/components/TwoFactorModal';
@@ -262,14 +262,15 @@ export default function DriverProfileScreen() {
 
   useEffect(() => {
     if (!user?.id) return;
-    const unsub = onSnapshot(doc(db, 'users', user.id), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setRatingStats({
-          avg: Number(data.average_rating) || 5.0,
-          count: Number(data.total_ratings) || 0
-        });
-      }
+    const qRatings = query(collection(db, 'ratings'), where('target_user_id', '==', user.id));
+    const unsub = onSnapshot(qRatings, (snap) => {
+      let sum = 0;
+      const count = snap.docs.length;
+      snap.docs.forEach((docItem) => {
+        sum += Number(docItem.data().stars) || 5;
+      });
+      const avg = count > 0 ? Number((sum / count).toFixed(1)) : 5.0;
+      setRatingStats({ avg, count });
     });
     return unsub;
   }, [user?.id]);

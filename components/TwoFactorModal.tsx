@@ -133,12 +133,12 @@ export default function TwoFactorModal({
 
       if (channel === 'email') {
         Alert.alert(
-          'Verification Email Sent 📧',
+          'Verification Email Sent',
           `A verification link has been dispatched to ${destination.trim()}.\n\nPlease check your inbox and tap the link to verify your account.`
         );
       } else {
         Alert.alert(
-          '2FA SMS Code Sent 📲',
+          '2FA Verification Code Sent',
           `A 6-digit verification code has been sent via SMS to ${destination.trim()}.\n\nPlease enter the code below.`
         );
       }
