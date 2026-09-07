@@ -90,7 +90,17 @@ export default function ActivePickupScreen() {
         if (data.status === 'in_progress') {
           router.replace({
             pathname: '/(driver)/trip-in-progress',
-            params: { rideId },
+            params: {
+              rideId,
+              price: price || data.fare || data.price,
+              pickup: pickup || data.pickup_address || data.pickup,
+              destination: destination || data.destination_address || data.destination,
+              passengerName: passengerName || data.passenger_name,
+              passengerUsername,
+              passengerEmail: passengerEmail || data.passenger_email,
+              passengerPhone: passengerPhone || data.passenger_phone,
+              passengerGender,
+            },
           });
           return;
         }

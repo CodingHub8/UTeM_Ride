@@ -86,7 +86,10 @@ export default function TripInProgressScreen() {
     passengerGender: string;
   }>();
 
-  const fareValue = parseFare(price) || 0;
+  const [fareValue, setFareValue] = useState<number>(() => parseFare(price) || 0);
+  const [pickupAddr, setPickupAddr] = useState<string>(pickup || 'FTMK, UTeM Main Campus');
+  const [destAddr, setDestAddr] = useState<string>(destination || 'Melaka Sentral Bus Terminal');
+
   const commissionFee = +(fareValue * COMMISSION_RATE).toFixed(2);
   const netEarnings = +(fareValue - commissionFee).toFixed(2);
 
@@ -125,6 +128,19 @@ export default function TripInProgressScreen() {
           router.replace('/(driver)/home');
           return;
         }
+
+        const liveFare = parseFare(data.fare || data.price || data.fare_amount || price);
+        if (liveFare > 0) {
+          setFareValue(liveFare);
+        }
+
+        if (data.pickup_address || data.pickup) {
+          setPickupAddr(data.pickup_address || data.pickup);
+        }
+        if (data.destination_address || data.destination) {
+          setDestAddr(data.destination_address || data.destination);
+        }
+
         let gotCoords = false;
         if (data.pickup_coords) {
           setPickupCoord({ latitude: data.pickup_coords.latitude, longitude: data.pickup_coords.longitude });
@@ -149,12 +165,13 @@ export default function TripInProgressScreen() {
           ...prev,
           name: data.passenger_name || prev.name,
           phone: data.passenger_phone || prev.phone,
+          email: data.passenger_email || prev.email,
         }));
         if (gotCoords) setCoordsReady(true);
       }
     });
     return unsub;
-  }, [rideId, completing]);
+  }, [rideId, completing, price]);
 
   useEffect(() => {
     if (hasFit) return;
@@ -365,11 +382,11 @@ export default function TripInProgressScreen() {
           <View style={{ flex: 1 }}>
             <View style={{ marginBottom: Spacing.md }}>
               <Text style={styles.routeLabel}>Picked up from</Text>
-              <Text style={[styles.routeValue, dynamicStyles.routeValue]} numberOfLines={1}>{pickup || 'FTMK, UTeM Main Campus'}</Text>
+              <Text style={[styles.routeValue, dynamicStyles.routeValue]} numberOfLines={1}>{pickupAddr}</Text>
             </View>
             <View>
               <Text style={styles.routeLabel}>Heading to</Text>
-              <Text style={[styles.routeValue, dynamicStyles.routeValue]} numberOfLines={1}>{destination || 'Melaka Sentral Bus Terminal'}</Text>
+              <Text style={[styles.routeValue, dynamicStyles.routeValue]} numberOfLines={1}>{destAddr}</Text>
             </View>
           </View>
         </View>

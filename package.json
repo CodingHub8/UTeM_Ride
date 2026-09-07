@@ -10,6 +10,7 @@
     "web": "node ./scripts/generate-admin-config.js && expo start --web",
     "prepare-hosting": "node ./scripts/prepare-hosting.js",
     "deploy-hosting": "node ./scripts/prepare-hosting.js && firebase deploy --only hosting",
+    "test": "node ./scripts/run-tests.js",
     "lint": "expo lint"
   },
   "dependencies": {
