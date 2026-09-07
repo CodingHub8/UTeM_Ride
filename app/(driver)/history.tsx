@@ -131,22 +131,31 @@ export default function DriverHistoryScreen() {
     modalContent: { backgroundColor: isDark ? Colors.darkCard : Colors.white },
   };
 
-  const renderStars = (stars: number) => (
-    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      {[1, 2, 3, 4, 5].map((s) => (
-        <Ionicons
-          key={s}
-          name={s <= Math.floor(stars) ? "star" : (s - stars <= 0.5 ? "star-half" : "star-outline")}
-          size={14}
-          color={s <= Math.ceil(stars) ? Colors.warning : Colors.gray400}
-          style={{ marginRight: 2 }}
-        />
-      ))}
-      <Text style={{ fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: Colors.warning, marginLeft: 4 }}>
-        {Number(stars).toFixed(1)}
-      </Text>
-    </View>
-  );
+  const renderStars = (stars: number) => {
+    if (!stars || stars === 0) {
+      return (
+        <Text style={{ fontSize: FontSize.xs, color: isDark ? Colors.gray400 : Colors.gray600, fontStyle: 'italic' }}>
+          No rating given
+        </Text>
+      );
+    }
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        {[1, 2, 3, 4, 5].map((s) => (
+          <Ionicons
+            key={s}
+            name={s <= Math.floor(stars) ? "star" : (s - stars <= 0.5 ? "star-half" : "star-outline")}
+            size={14}
+            color={s <= Math.ceil(stars) ? Colors.warning : Colors.gray400}
+            style={{ marginRight: 2 }}
+          />
+        ))}
+        <Text style={{ fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: Colors.warning, marginLeft: 4 }}>
+          {Number(stars).toFixed(1)}
+        </Text>
+      </View>
+    );
+  };
 
   const renderRideItem = ({ item }: { item: any }) => {
     const badge = getStatusBadge(item.status);

@@ -258,7 +258,7 @@ export default function DriverProfileScreen() {
     }
   };
 
-  const [ratingStats, setRatingStats] = useState({ avg: 5.0, count: 0 });
+  const [ratingStats, setRatingStats] = useState({ avg: 0, count: 0 });
 
   useEffect(() => {
     if (!user?.id) return;
@@ -269,7 +269,7 @@ export default function DriverProfileScreen() {
       snap.docs.forEach((docItem) => {
         sum += Number(docItem.data().stars) || 5;
       });
-      const avg = count > 0 ? Number((sum / count).toFixed(1)) : 5.0;
+      const avg = count > 0 ? Number((sum / count).toFixed(1)) : 0;
       setRatingStats({ avg, count });
     });
     return unsub;
@@ -310,7 +310,7 @@ export default function DriverProfileScreen() {
             />
           ))}
           <Text style={{ fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: isDark ? Colors.primaryLight : Colors.primary, marginLeft: 4 }}>
-            {ratingStats.avg.toFixed(1)} ({ratingStats.count} review{ratingStats.count === 1 ? '' : 's'})
+            {ratingStats.count > 0 ? `${ratingStats.avg.toFixed(1)} (${ratingStats.count} review${ratingStats.count === 1 ? '' : 's'})` : 'No ratings yet'}
           </Text>
         </View>
 

@@ -64,7 +64,7 @@ export default function DriverHomeScreen() {
   const [earnings, setEarnings] = useState<EarningsSummary>({ today: 0, week: 0, todayTrips: 0, weekTrips: 0 });
   const [show2FA, setShow2FA] = useState(false);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
-  const [driverRating, setDriverRating] = useState<number>(5.0);
+  const [driverRating, setDriverRating] = useState<number>(0);
   const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
@@ -76,7 +76,7 @@ export default function DriverHomeScreen() {
       snap.docs.forEach((docItem) => {
         sum += Number(docItem.data().stars) || 5;
       });
-      const avg = count > 0 ? Number((sum / count).toFixed(1)) : 5.0;
+      const avg = count > 0 ? Number((sum / count).toFixed(1)) : 0;
       setDriverRating(avg);
     });
     return unsub;
@@ -324,10 +324,10 @@ export default function DriverHomeScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
             <View style={[styles.statusDot, isOnline && styles.statusDotOnline]} />
             <Text style={[styles.statusLabel, dynamicStyles.statusLabel]}>{isOnline ? 'Online' : 'Offline'}</Text>
-            <View style={{ backgroundColor: Colors.warning + '20', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginLeft: 8, flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name="star" size={12} color={Colors.warning} style={{ marginRight: 2 }} />
+            <View style={{ backgroundColor: driverRating > 0 ? Colors.warning + '20' : Colors.gray500 + '20', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginLeft: 8, flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name={driverRating > 0 ? "star" : "star-outline"} size={12} color={driverRating > 0 ? Colors.warning : Colors.gray400} style={{ marginRight: 2 }} />
               <Text style={{ fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.gray900 }}>
-                {driverRating.toFixed(1)}
+                {driverRating > 0 ? driverRating.toFixed(1) : 'No ratings'}
               </Text>
             </View>
           </View>

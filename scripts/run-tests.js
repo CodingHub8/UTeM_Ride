@@ -37,7 +37,7 @@ function calculateEarnings(fare, commissionRate = 0.10) {
 }
 
 function calculateAverageRating(starsList) {
-  if (!starsList || starsList.length === 0) return 5.0;
+  if (!starsList || starsList.length === 0) return 0;
   const sum = starsList.reduce((acc, s) => acc + (Number(s) || 5), 0);
   return Number((sum / starsList.length).toFixed(1));
 }
@@ -91,7 +91,7 @@ console.log('\n[Suite 3: Rating Average Calculation]');
 assert(calculateAverageRating([5, 5, 4]) === 4.7, '5 + 5 + 4 averages to 4.7');
 assert(calculateAverageRating([5, 5, 5, 5]) === 5.0, 'Four 5-star ratings average to 5.0');
 assert(calculateAverageRating([1, 2]) === 1.5, '1 + 2 averages to 1.5');
-assert(calculateAverageRating([]) === 5.0, 'Empty rating list defaults to 5.0');
+assert(calculateAverageRating([]) === 0, 'Empty rating list defaults to 0 (No ratings)');
 
 // Suite 4: Email Prefix Alias Formatting
 console.log('\n[Suite 4: Email Prefix Alias Formatting]');
