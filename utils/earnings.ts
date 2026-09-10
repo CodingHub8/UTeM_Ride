@@ -26,17 +26,31 @@ export function subscribeDriverEarnings(driverId: string, onUpdate: (summary: Ea
     const weekStart = startOfWeek();
     let today = 0;
     let week = 0;
-    let todayTrips = 0;
-    let weekTrips = 0;
     const tripIdsToday = new Set<string>();
     const tripIdsWeek = new Set<string>();
 
     snap.forEach((d) => {
       const data = d.data();
-      if (data.transaction_type !== 'fare_payment' || Number(data.amount) <= 0) return;
-      const ts = data.created_at?.toMillis?.() || data.timestamp || 0;
+      // Include both online ('fare_payment') and cash ('cash_payment') positive earnings
+      const isEarningType = data.transaction_type === 'fare_payment' || data.transaction_type === 'cash_payment';
       const amt = Number(data.amount) || 0;
+
+      if (!isEarningType || amt <= 0) return;
+
+      // Extract timestamp with fallback to Date.now() for pending Firestore serverTimestamp writes
+      let ts = 0;
+      if (data.created_at && typeof data.created_at.toMillis === 'function') {
+        ts = data.created_at.toMillis();
+      } else if (typeof data.created_at === 'number' && data.created_at > 0) {
+        ts = data.created_at;
+      } else if (typeof data.timestamp === 'number' && data.timestamp > 0) {
+        ts = data.timestamp;
+      } else {
+        ts = Date.now();
+      }
+
       const rideId = data.ride_id || d.id;
+
       if (ts >= todayStart) {
         today += amt;
         tripIdsToday.add(rideId);
@@ -48,8 +62,8 @@ export function subscribeDriverEarnings(driverId: string, onUpdate: (summary: Ea
     });
 
     onUpdate({
-      today,
-      week,
+      today: Number(today.toFixed(2)),
+      week: Number(week.toFixed(2)),
       todayTrips: tripIdsToday.size,
       weekTrips: tripIdsWeek.size,
     });
