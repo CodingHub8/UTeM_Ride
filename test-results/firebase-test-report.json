@@ -1,0 +1,410 @@
+{
+  "timestamp": "2026-09-10T12:54:45.457Z",
+  "environment": "Firebase Local Emulator Suite & Node.js Test Runner",
+  "summary": {
+    "total": 40,
+    "passed": 40,
+    "failed": 0,
+    "passRate": "100.0%",
+    "positiveTests": {
+      "total": 24,
+      "passed": 24
+    },
+    "negativeTests": {
+      "total": 16,
+      "passed": 16
+    }
+  },
+  "useQuestionnaireCategories": [
+    {
+      "name": "Usefulness",
+      "items": 8,
+      "mean": 5.88,
+      "max": 7,
+      "rate": "84.0%"
+    },
+    {
+      "name": "Satisfaction",
+      "items": 7,
+      "mean": 5.92,
+      "max": 7,
+      "rate": "85.7%"
+    },
+    {
+      "name": "Ease of Use",
+      "items": 10,
+      "mean": 5.78,
+      "max": 7,
+      "rate": "81.5%"
+    },
+    {
+      "name": "Ease of Learning",
+      "items": 4,
+      "mean": 6.25,
+      "max": 7,
+      "rate": "90.0%"
+    }
+  ],
+  "results": [
+    {
+      "id": "TC-AUTH-01",
+      "category": "Authentication",
+      "type": "POSITIVE",
+      "description": "Valid UTeM student email domain (@student.utem.edu.my)",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-AUTH-02",
+      "category": "Authentication",
+      "type": "POSITIVE",
+      "description": "Valid UTeM staff email domain (@utem.edu.my)",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-AUTH-03",
+      "category": "Authentication",
+      "type": "POSITIVE",
+      "description": "Valid UTeM siswa email domain (@siswa.utem.edu.my)",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-AUTH-04",
+      "category": "Authentication",
+      "type": "NEGATIVE",
+      "description": "Rejects external public email address (@gmail.com)",
+      "expected": false,
+      "actual": false,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-AUTH-05",
+      "category": "Authentication",
+      "type": "NEGATIVE",
+      "description": "Rejects empty string email input",
+      "expected": false,
+      "actual": false,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-AUTH-06",
+      "category": "Authentication",
+      "type": "NEGATIVE",
+      "description": "Rejects malformed email string without @ symbol",
+      "expected": false,
+      "actual": false,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-FARE-01",
+      "category": "Fare & Payment",
+      "type": "POSITIVE",
+      "description": "Parses standard fare string \"11.62\" correctly",
+      "expected": 11.62,
+      "actual": 11.62,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-FARE-02",
+      "category": "Fare & Payment",
+      "type": "POSITIVE",
+      "description": "Strips currency prefix \"RM 11.62\" cleanly",
+      "expected": 11.62,
+      "actual": 11.62,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-FARE-03",
+      "category": "Fare & Payment",
+      "type": "POSITIVE",
+      "description": "Handles raw numeric fare float 15.5",
+      "expected": 15.5,
+      "actual": 15.5,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-FARE-04",
+      "category": "Fare & Payment",
+      "type": "NEGATIVE",
+      "description": "Fallback on undefined fare input returns 0",
+      "expected": 0,
+      "actual": 0,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-FARE-05",
+      "category": "Fare & Payment",
+      "type": "NEGATIVE",
+      "description": "Fallback on null fare input returns 0",
+      "expected": 0,
+      "actual": 0,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-FARE-06",
+      "category": "Fare & Payment",
+      "type": "NEGATIVE",
+      "description": "Handles zero fare string \"RM 0.00\"",
+      "expected": 0,
+      "actual": 0,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-FARE-07",
+      "category": "Fare & Payment",
+      "type": "NEGATIVE",
+      "description": "Handles non-numeric text string \"free\"",
+      "expected": 0,
+      "actual": 0,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-EARN-01",
+      "category": "Driver Earnings",
+      "type": "POSITIVE",
+      "description": "Calculates gross fare RM 11.62 correctly",
+      "expected": 11.62,
+      "actual": 11.62,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-EARN-02",
+      "category": "Driver Earnings",
+      "type": "POSITIVE",
+      "description": "Deducts 10% platform commission (-RM 1.16)",
+      "expected": 1.16,
+      "actual": 1.16,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-EARN-03",
+      "category": "Driver Earnings",
+      "type": "POSITIVE",
+      "description": "Calculates net driver payout RM 10.46",
+      "expected": 10.46,
+      "actual": 10.46,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-EARN-04",
+      "category": "Driver Earnings",
+      "type": "POSITIVE",
+      "description": "DEF-03 Fix: Includes cash_payment and fare_payment in Today Earnings (RM 36.62)",
+      "expected": 36.62,
+      "actual": 36.62,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-EARN-05",
+      "category": "Driver Earnings",
+      "type": "NEGATIVE",
+      "description": "DEF-03 Fix: Excludes service_fee negative deduction from gross earning total",
+      "expected": 2,
+      "actual": 2,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-RATE-01",
+      "category": "Rating System",
+      "type": "POSITIVE",
+      "description": "Calculates average for ratings array [5, 5, 4] as 4.7",
+      "expected": 4.7,
+      "actual": 4.7,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-RATE-02",
+      "category": "Rating System",
+      "type": "POSITIVE",
+      "description": "Calculates average for four 5-star ratings [5, 5, 5, 5] as 5.0",
+      "expected": 5,
+      "actual": 5,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-RATE-03",
+      "category": "Rating System",
+      "type": "NEGATIVE",
+      "description": "DEF-01 Fix: Empty rating array [] defaults to 0 (No ratings badge)",
+      "expected": 0,
+      "actual": 0,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-RATE-04",
+      "category": "Rating System",
+      "type": "NEGATIVE",
+      "description": "Null rating array input returns 0",
+      "expected": 0,
+      "actual": 0,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-PROX-01",
+      "category": "Proximity Detection",
+      "type": "POSITIVE",
+      "description": "Identical coordinates return 0.0m distance",
+      "expected": 0,
+      "actual": 0,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-PROX-02",
+      "category": "Proximity Detection",
+      "type": "POSITIVE",
+      "description": "Nearby coordinates (~45m) trigger auto-arrival (<100m threshold)",
+      "expected": "< 100m",
+      "actual": "47.2m",
+      "status": "PASS"
+    },
+    {
+      "id": "TC-PROX-03",
+      "category": "Proximity Detection",
+      "type": "NEGATIVE",
+      "description": "Distant coordinates (~12.5km) do not trigger auto-arrival (>100m)",
+      "expected": "> 100m",
+      "actual": "12469.1m",
+      "status": "PASS"
+    },
+    {
+      "id": "TC-2FA-01",
+      "category": "2FA Security",
+      "type": "POSITIVE",
+      "description": "Formats local phone 0123456789 to +60123456789",
+      "expected": "+60123456789",
+      "actual": "+60123456789",
+      "status": "PASS"
+    },
+    {
+      "id": "TC-2FA-02",
+      "category": "2FA Security",
+      "type": "POSITIVE",
+      "description": "Preserves existing international +60 format",
+      "expected": "+60198765432",
+      "actual": "+60198765432",
+      "status": "PASS"
+    },
+    {
+      "id": "TC-2FA-03",
+      "category": "2FA Security",
+      "type": "POSITIVE",
+      "description": "Generates OTP of exactly 6 digits length",
+      "expected": 6,
+      "actual": 6,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-2FA-04",
+      "category": "2FA Security",
+      "type": "POSITIVE",
+      "description": "Validates correct 6-digit OTP code",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-2FA-05",
+      "category": "2FA Security",
+      "type": "NEGATIVE",
+      "description": "Rejects incorrect OTP code",
+      "expected": false,
+      "actual": false,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-2FA-06",
+      "category": "2FA Security",
+      "type": "NEGATIVE",
+      "description": "Rejects expired OTP after 120s timeout window",
+      "expected": false,
+      "actual": false,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-2FA-07",
+      "category": "2FA Security",
+      "type": "NEGATIVE",
+      "description": "Rejects non-numeric OTP string (\"123a56\")",
+      "expected": false,
+      "actual": false,
+      "status": "PASS"
+    },
+    {
+      "id": "TC-USE-01",
+      "category": "USE Questionnaire",
+      "type": "POSITIVE",
+      "description": "Category [Usefulness] mean score (5.88/7.0) satisfies usability threshold (>5.0)",
+      "expected": ">= 5.0",
+      "actual": "5.88/7.0 (84.0%)",
+      "status": "PASS"
+    },
+    {
+      "id": "TC-USE-02",
+      "category": "USE Questionnaire",
+      "type": "POSITIVE",
+      "description": "Category [Satisfaction] mean score (5.92/7.0) satisfies usability threshold (>5.0)",
+      "expected": ">= 5.0",
+      "actual": "5.92/7.0 (85.7%)",
+      "status": "PASS"
+    },
+    {
+      "id": "TC-USE-03",
+      "category": "USE Questionnaire",
+      "type": "POSITIVE",
+      "description": "Category [Ease of Use] mean score (5.78/7.0) satisfies usability threshold (>5.0)",
+      "expected": ">= 5.0",
+      "actual": "5.78/7.0 (81.5%)",
+      "status": "PASS"
+    },
+    {
+      "id": "TC-USE-04",
+      "category": "USE Questionnaire",
+      "type": "POSITIVE",
+      "description": "Category [Ease of Learning] mean score (6.25/7.0) satisfies usability threshold (>5.0)",
+      "expected": ">= 5.0",
+      "actual": "6.25/7.0 (90.0%)",
+      "status": "PASS"
+    },
+    {
+      "id": "TC-FIRE-01",
+      "category": "Firebase Rules",
+      "type": "POSITIVE",
+      "description": "Firestore Rule: Authenticated user read own document",
+      "expected": "ALLOW",
+      "actual": "ALLOW",
+      "status": "PASS"
+    },
+    {
+      "id": "TC-FIRE-02",
+      "category": "Firebase Rules",
+      "type": "POSITIVE",
+      "description": "Firestore Rule: Verified driver update driver_profiles",
+      "expected": "ALLOW",
+      "actual": "ALLOW",
+      "status": "PASS"
+    },
+    {
+      "id": "TC-FIRE-03",
+      "category": "Firebase Rules",
+      "type": "NEGATIVE",
+      "description": "Firestore Rule: Unauthenticated user write transactions -> DENY",
+      "expected": "DENY",
+      "actual": "DENY",
+      "status": "PASS"
+    },
+    {
+      "id": "TC-FIRE-04",
+      "category": "Firebase Rules",
+      "type": "NEGATIVE",
+      "description": "Firestore Rule: Passenger modifying driver wallet balance -> DENY",
+      "expected": "DENY",
+      "actual": "DENY",
+      "status": "PASS"
+    }
+  ]
+}
